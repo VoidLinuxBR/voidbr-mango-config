@@ -1,3 +1,3 @@
-# voidbr-mangowm-config
+# voidbr-mango-config
 
-Skel config for VoidBR MANGOWM Meta Package
+Skel config for VoidBR MANGO Meta Package

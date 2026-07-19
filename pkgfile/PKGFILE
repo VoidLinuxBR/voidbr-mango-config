@@ -1,7 +1,7 @@
 # Maintainer: Vilmar Catafesta <vcatafesta@gmail.com>
 
-pkgname=voidbr-mangowm-config
-pkgdesc="Skel config for VoidBR MANGOWM Meta Package"
+pkgname=voidbr-mango-config
+pkgdesc="Skel config for VoidBR MANGO Meta Package"
 pkgver=$(date +%Y%m%d)
 pkgrel=$(date +%H%M)
 provides=()

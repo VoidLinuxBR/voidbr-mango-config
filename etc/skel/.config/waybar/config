@@ -1,105 +1,83 @@
 {
-    "layer": "top",
-    "position": "top",
-    "height": 30,
-    "spacing": 4,
+  "layer": "top",
+  "position": "top",
+  "height": 30,
+  "spacing": 4,
 
-    "modules-left": [
-        "sway/workspaces",
-        "sway/mode"
-    ],
+  "modules-left": ["sway/workspaces", "sway/mode"],
 
-    "modules-center": [
-        "clock"
-    ],
+  "modules-center": ["clock"],
 
-    "modules-right": [
-        "custom/help",
-        "pulseaudio",
-        "cpu",
-        "memory",
-        "battery",
-        "network",
-        "tray"
-    ],
+  "modules-right": [
+    "custom/help",
+    "pulseaudio",
+    "cpu",
+    "memory",
+    "battery",
+    "network",
+    "tray"
+  ],
 
-    "sway/workspaces": {
-        "disable-scroll": true,
-        "all-outputs": true,
-        "format": "{name}"
+  "sway/workspaces": {
+    "disable-scroll": true,
+    "all-outputs": true,
+    "format": "{name}"
+  },
+
+  "clock": {
+    "format": " {:%d/%m/%Y   %H:%M}",
+    "tooltip-format": "{:%A, %d/%m/%Y}"
+  },
+
+  "custom/help": {
+    "format": "󰘥 Help",
+    "tooltip": true,
+    "tooltip-format": "VoidBR Shortcuts\nClique ou pressione Super+F1",
+    "on-click": "voidbr-mango-shortcuts"
+  },
+
+  "pulseaudio": {
+    "format": "{icon} {volume}%",
+    "format-muted": "󰝟 Mutado",
+    "format-icons": {
+      "default": ["", "", ""]
     },
+    "on-click": "pavucontrol",
+    "on-click-right": "pactl set-sink-mute @DEFAULT_SINK@ toggle",
+    "on-scroll-up": "pactl set-sink-volume @DEFAULT_SINK@ +5%",
+    "on-scroll-down": "pactl set-sink-volume @DEFAULT_SINK@ -5%",
+    "tooltip": true
+  },
 
-    "clock": {
-         "format": " {:%d/%m/%Y   %H:%M}",
-         "tooltip-format": "{:%A, %d/%m/%Y}"
+  "network": {
+    "format-wifi": " {essid}",
+    "format-ethernet": "󰈀 Ethernet",
+    "format-disconnected": "󰖪 Offline"
+  },
+
+  "cpu": {
+    "format": " {usage}%",
+    "on-click": "gnome-system-monitor"
+  },
+
+  "memory": {
+    "format": "󰍛 {}%",
+    "on-click": "foot -e htop"
+  },
+
+  "battery": {
+    "format": "{icon} {capacity}%",
+    "format-charging": "󰂄 {capacity}%",
+    "format-plugged": " {capacity}%",
+    "states": {
+      "warning": 30,
+      "critical": 15
     },
+    "format-icons": ["󰂎", "󰁺", "󰁻", "󰁼", "󰁽", "󰁾", "󰁿", "󰂀", "󰂁", "󰂂", "󰁹"]
+  },
 
-    "custom/help": {
-        "format": "󰘥 Help",
-        "tooltip": true,
-        "tooltip-format": "VoidBR Shortcuts\nClique ou pressione Super+F1",
-        "on-click": "voidbr-mango-shortcuts"
-    },
-
-    "pulseaudio": {
-        "format": "{icon} {volume}%",
-        "format-muted": "󰝟 Mutado",
-        "format-icons": {
-            "default": [
-                "",
-                "",
-                ""
-            ]
-        },
-        "on-click": "pavucontrol",
-        "on-click-right": "pactl set-sink-mute @DEFAULT_SINK@ toggle",
-        "on-scroll-up": "pactl set-sink-volume @DEFAULT_SINK@ +5%",
-        "on-scroll-down": "pactl set-sink-volume @DEFAULT_SINK@ -5%",
-        "tooltip": true
-    },
-
-    "network": {
-        "format-wifi": " {essid}",
-        "format-ethernet": "󰈀 Ethernet",
-        "format-disconnected": "󰖪 Offline"
-    },
-
-    "cpu": {
-        "format": " {usage}%",
-#       "on-click": "foot -e cpufreq-bench",
-        "on-click": "gnome-system-monitor",
-    },
-
-    "memory": {
-        "format": "󰍛 {}%",
-        "on-click": "foot -e htop"
-    },
-
-    "battery": {
-        "format": "{icon} {capacity}%",
-        "format-charging": "󰂄 {capacity}%",
-        "format-plugged": " {capacity}%",
-        "states": {
-            "warning": 30,
-            "critical": 15
-        },
-        "format-icons": [
-            "󰂎",
-            "󰁺",
-            "󰁻",
-            "󰁼",
-            "󰁽",
-            "󰁾",
-            "󰁿",
-            "󰂀",
-            "󰂁",
-            "󰂂",
-            "󰁹"
-        ]
-    },
-
-    "tray": {
-        "icon-size": 16,
-        "spacing": 8
-    }
+  "tray": {
+    "icon-size": 16,
+    "spacing": 8
+  }
 }

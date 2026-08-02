@@ -54,7 +54,7 @@
     "format": " VoidBR",
     "tooltip": true,
     "tooltip-format": "Sobre o VoidBR e o sistema",
-    "on-click": "foot -e fastfetch"
+    "on-click": "foot -e bash -c \"fastfetch; read -n 1 -s -r -p 'Pressione qualquer tecla para fechar...'\""
   },
   "network": {
     "format-wifi": " {essid}",

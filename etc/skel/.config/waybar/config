@@ -3,11 +3,8 @@
   "height": 30,
   "width": "auto",
   "margin": 4,
-
-  "modules-left": ["custom/about", "mango/workspaces"],
-
-  "modules-center": ["mango/window"],
-
+  "modules-left": ["custom/about", "ext/workspaces"],
+  "modules-center": ["dwl/window"],
   "modules-right": [
     "custom/menu",
     "custom/help",
@@ -20,95 +17,92 @@
     "custom/power",
     "tray"
   ],
-
-  "mango/workspaces": {
-    "format": "{}",
-    "on-scroll-up": "hyprctl dispatch workspace e+1",
-    "on-scroll-down": "hyprctl dispatch workspace e-1",
-    "persistent-workspaces": {
-      "*": 5
+  "ext/workspaces": {
+    "format": "{icon}",
+    "ignore-hidden": true,
+    "sort-by-id": true,
+    "on-click": "activate",
+    "on-click-right": "deactivate",
+    "on-scroll-up": "~/.config/mango/scripts/mango-workspace-scroll.sh next",
+    "on-scroll-down": "~/.config/mango/scripts/mango-workspace-scroll.sh prev",
+    "format-icons": {
+      "active": "",
+      "default": ""
     }
   },
-
+  "dwl/window": {
+    "format": "[{layout}] {title}",
+    "max-length": 50
+  },
   "custom/menu": {
     "format": " 󰣇 ",
     "tooltip": true,
     "tooltip-format": "Aplicativos",
     "on-click": "nwggrid"
   },
-
   "custom/help": {
     "format": " 󰘥 ",
     "tooltip": true,
     "tooltip-format": "VoidBR Mango Shortcuts\nClique ou pressione Super+F1",
     "on-click": "voidbr-mango-shortcuts"
   },
-
   "custom/wallpaper": {
-    "format": " ",
+    "format": " ",
     "on-click": "/usr/local/bin/voidbr-change-wallpaper"
   },
-
   "custom/about": {
-    "format": " VoidBR",
+    "format": " VoidBR",
     "tooltip": true,
     "tooltip-format": "Sobre o VoidBR e o sistema",
-    "on-click": "hyprsysteminfo"
+    "on-click": "foot -e fastfetch"
   },
-
   "network": {
-    "format-wifi": " {essid}",
+    "format-wifi": " {essid}",
     "format-ethernet": "󰈀 Ethernet",
     "format-disconnected": "󰖪 Offline",
     "on-click": "nm-connection-editor"
   },
-
   "battery": {
     "format": "{icon} {capacity}%",
     "format-charging": "󰂄 {capacity}%",
-    "format-plugged": " {capacity}%",
+    "format-plugged": " {capacity}%",
     "states": {
       "warning": 30,
       "critical": 15
     },
     "format-icons": ["󰂎", "󰁺", "󰁻", "󰁼", "󰁽", "󰁾", "󰁿", "󰂀", "󰂁", "󰂂", "󰁹"]
   },
-
   "tray": {
     "spacing": 10
   },
-
   "clock": {
     "timezone": "America/Sao_Paulo",
     "tooltip-format": "<big>{:%Y %B}</big>\n<tt><big>{calendar}</big></tt>",
     "format-alt": "{:%a %d-%m-%Y}"
   },
-
   "cpu": {
-    "format": "{usage}% ",
+    "format": "{usage}% ",
     "on-click": "gnome-system-monitor"
   },
-
   "memory": {
-    "format": "󰍛 {}% ",
+    "format": "󰍛 {}% ",
     "on-click": "foot -e htop"
   },
-
   "pulseaudio": {
     "format": "{volume}% {icon}    {format_source}",
-    "format-bluetooth": "{volume}% {icon} {format_source}",
-    "format-bluetooth-muted": " {icon} {format_source}",
-    "format-muted": " {format_source}",
-    "format-source": "{volume}% ",
-    "format-source-muted": "",
+    "format-bluetooth": "{volume}% {icon} {format_source}",
+    "format-bluetooth-muted": " {icon} {format_source}",
+    "format-muted": " {format_source}",
+    "format-source": "{volume}% ",
+    "format-source-muted": "",
     "format-icons": {
-      "headphone": "",
-      "hands-free": "",
-      "headset": "",
-      "phone": "",
-      "portable": "",
-      "car": "",
-      "default": ["", "", ""]
+      "headphone": "",
+      "hands-free": "",
+      "headset": "",
+      "phone": "",
+      "portable": "",
+      "car": "",
+      "default": ["", "", ""]
     },
     "on-click": "pavucontrol"
   },

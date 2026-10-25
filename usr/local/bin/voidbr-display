@@ -1,0 +1,383 @@
+#!/usr/bin/env python3
+# ====================================================================
+# VoidBR Mango - Configuracao de monitores (GTK4)
+# Resolucao, taxa de atualizacao (Hz) e escala de cada monitor.
+# Grava em ~/.config/mango/monitors.conf (incluido pelo base.conf) e
+# aplica com "mmsg dispatch reload_config". Depois de aplicar, pede
+# confirmacao: se nao confirmar em 15 s, volta a config anterior.
+# ====================================================================
+import json
+import os
+import subprocess
+import sys
+
+import gi
+
+gi.require_version("Gtk", "4.0")
+gi.require_version("Gdk", "4.0")
+from gi.repository import Gdk, GLib, Gtk
+
+MONITORS_CONF = os.path.expanduser("~/.config/mango/monitors.conf")
+HEADER = "# GERADO POR voidbr-display - resolucao, Hz e escala dos monitores\n"
+SCALES = [1.0, 1.25, 1.5, 1.75, 2.0]
+CONFIRM_SECONDS = 15
+
+# Paleta central (~/.config/voidbr/colors.ini, gerada por voidbr-theme)
+PALETTE_CSS = os.path.expanduser("~/.config/voidbr/colors.css")
+
+
+def themed(css):
+    try:
+        with open(PALETTE_CSS, "rb") as f:
+            return f.read() + css
+    except OSError:
+        return css
+
+
+CSS = b"""
+window {
+    background-color: alpha(@bg, 0.86);
+    border: none;
+    border-radius: 16px;
+}
+.header-title {
+    font-size: 18px;
+    font-weight: bold;
+    color: @accent;
+}
+.header-sub {
+    font-size: 12px;
+    color: @fg_dim;
+    margin-bottom: 8px;
+}
+.card {
+    background-color: alpha(@bg3, 0.8);
+    border: 1px solid @bg3;
+    border-radius: 12px;
+    padding: 14px 16px;
+}
+.mon-name {
+    font-size: 15px;
+    font-weight: bold;
+    color: @fg;
+}
+.mon-model {
+    font-size: 11px;
+    color: @fg_dim;
+}
+.field {
+    color: @fg_alt;
+}
+.effective {
+    font-size: 11px;
+    color: @accent;
+}
+button.apply {
+    background-image: none;
+    background-color: @accent;
+    color: @bg;
+    font-weight: bold;
+    border-radius: 10px;
+    padding: 6px 18px;
+}
+button.plain {
+    border-radius: 10px;
+    padding: 6px 18px;
+}
+.confirm {
+    background-color: alpha(@yellow, 0.15);
+    border: 1px solid @yellow;
+    border-radius: 12px;
+    padding: 10px 14px;
+}
+.confirm label {
+    color: @fg;
+}
+"""
+
+
+def fmt_refresh(r):
+    return f"{r:.3f}".rstrip("0").rstrip(".")
+
+
+def read_outputs():
+    res = subprocess.run(["wlr-randr", "--json"], capture_output=True, text=True)
+    return [o for o in json.loads(res.stdout) if o.get("enabled")]
+
+
+def read_conf():
+    try:
+        with open(MONITORS_CONF) as f:
+            return f.read()
+    except OSError:
+        return ""
+
+
+def parse_rules(text):
+    # "monitorrule=name:DP-1,width:2560,..." -> [{"name": "DP-1", "width": "2560", ...}]
+    rules = []
+    for line in text.splitlines():
+        line = line.strip()
+        if not line.startswith("monitorrule="):
+            continue
+        fields = {}
+        for part in line[len("monitorrule="):].split(","):
+            if ":" in part:
+                k, v = part.split(":", 1)
+                fields[k.strip()] = v.strip()
+        rules.append(fields)
+    return rules
+
+
+def rule_name(rule):
+    return rule.get("name", "").strip("^$")
+
+
+def build_conf(rules):
+    lines = [HEADER]
+    for r in rules:
+        lines.append("monitorrule=" + ",".join(f"{k}:{v}" for k, v in r.items()) + "\n")
+    return "".join(lines)
+
+
+def apply_conf(text):
+    with open(MONITORS_CONF, "w") as f:
+        f.write(text)
+    subprocess.run(["mmsg", "dispatch", "reload_config"], capture_output=True)
+
+
+class MonitorCard(Gtk.Box):
+    def __init__(self, output):
+        super().__init__(orientation=Gtk.Orientation.VERTICAL, spacing=10)
+        self.add_css_class("card")
+        self.output = output
+        self.name = output["name"]
+
+        name = Gtk.Label(label=f"󰍹  {self.name}", xalign=0)
+        name.add_css_class("mon-name")
+        model = Gtk.Label(label=f"{output.get('make', '')} {output.get('model', '')}".strip(), xalign=0)
+        model.add_css_class("mon-model")
+        self.append(name)
+        self.append(model)
+
+        grid = Gtk.Grid(column_spacing=14, row_spacing=10)
+        self.append(grid)
+
+        # Resolucoes unicas, da maior para a menor
+        modes = output["modes"]
+        current = next((m for m in modes if m["current"]), modes[0])
+        preferred = next((m for m in modes if m.get("preferred")), None)
+        self.resolutions = sorted({(m["width"], m["height"]) for m in modes},
+                                  key=lambda wh: wh[0] * wh[1], reverse=True)
+        res_labels = []
+        for w, h in self.resolutions:
+            native = preferred and (w, h) == (preferred["width"], preferred["height"])
+            res_labels.append(f"{w} × {h}" + ("  (nativa)" if native else ""))
+        self.res_dd = Gtk.DropDown.new_from_strings(res_labels)
+        self.res_dd.set_selected(self.resolutions.index((current["width"], current["height"])))
+        self.res_dd.set_hexpand(True)
+
+        self.hz_dd = Gtk.DropDown.new_from_strings([])
+        self.refreshes = []
+
+        self.scale_values = sorted(set(SCALES + [round(output.get("scale", 1.0), 2)]))
+        self.scale_dd = Gtk.DropDown.new_from_strings(
+            [f"{s:g}x  ({int(s * 100)}%)" for s in self.scale_values])
+        self.scale_dd.set_selected(self.scale_values.index(round(output.get("scale", 1.0), 2)))
+
+        for row, (label, widget) in enumerate([("Resolução", self.res_dd),
+                                               ("Taxa de atualização", self.hz_dd),
+                                               ("Escala", self.scale_dd)]):
+            lbl = Gtk.Label(label=label, xalign=0)
+            lbl.add_css_class("field")
+            grid.attach(lbl, 0, row, 1, 1)
+            grid.attach(widget, 1, row, 1, 1)
+
+        self.effective = Gtk.Label(xalign=0)
+        self.effective.add_css_class("effective")
+        self.append(self.effective)
+
+        self.fill_refreshes(current["refresh"])
+        self.res_dd.connect("notify::selected", lambda *_: self.fill_refreshes(None))
+        self.hz_dd.connect("notify::selected", lambda *_: self.update_effective())
+        self.scale_dd.connect("notify::selected", lambda *_: self.update_effective())
+
+    def fill_refreshes(self, keep):
+        w, h = self.resolutions[self.res_dd.get_selected()]
+        rates = {}
+        for m in self.output["modes"]:
+            if (m["width"], m["height"]) == (w, h):
+                rates.setdefault(round(m["refresh"], 2), m["refresh"])
+        self.refreshes = sorted(rates.values(), reverse=True)
+        self.hz_dd.set_model(Gtk.StringList.new([f"{r:.2f}".rstrip("0").rstrip(".") + " Hz"
+                                                 for r in self.refreshes]))
+        idx = 0
+        if keep is not None:
+            idx = min(range(len(self.refreshes)), key=lambda i: abs(self.refreshes[i] - keep))
+        self.hz_dd.set_selected(idx)
+        self.update_effective()
+
+    def selection(self):
+        w, h = self.resolutions[self.res_dd.get_selected()]
+        r = self.refreshes[self.hz_dd.get_selected()]
+        s = self.scale_values[self.scale_dd.get_selected()]
+        return w, h, r, s
+
+    def update_effective(self):
+        if not self.refreshes:
+            return
+        w, h, _r, s = self.selection()
+        self.effective.set_text(f"Área útil com essa escala: {round(w / s)} × {round(h / s)}")
+
+
+class DisplayWindow(Gtk.ApplicationWindow):
+    def __init__(self, app):
+        super().__init__(application=app, title="Monitores")
+        self.set_default_size(520, -1)
+        self.set_resizable(False)
+
+        provider = Gtk.CssProvider()
+        provider.load_from_data(themed(CSS))
+        Gtk.StyleContext.add_provider_for_display(
+            Gdk.Display.get_default(), provider, Gtk.STYLE_PROVIDER_PRIORITY_APPLICATION)
+
+        box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=12)
+        for side in ("top", "bottom", "start", "end"):
+            getattr(box, f"set_margin_{side}")(20)
+        self.set_child(box)
+
+        title = Gtk.Label(label="󰍹  Monitores")
+        title.add_css_class("header-title")
+        sub = Gtk.Label(label="Resolução, Hz e escala — salvo em ~/.config/mango/monitors.conf")
+        sub.add_css_class("header-sub")
+        box.append(title)
+        box.append(sub)
+
+        self.cards = []
+        for output in read_outputs():
+            card = MonitorCard(output)
+            self.cards.append(card)
+            box.append(card)
+
+        # Faixa de confirmacao (aparece depois de aplicar)
+        self.confirm = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=10)
+        self.confirm.add_css_class("confirm")
+        self.confirm_label = Gtk.Label(xalign=0, hexpand=True, wrap=True)
+        keep = Gtk.Button(label="Manter")
+        keep.add_css_class("apply")
+        keep.connect("clicked", self.on_keep)
+        revert = Gtk.Button(label="Reverter")
+        revert.add_css_class("plain")
+        revert.connect("clicked", lambda *_: self.revert())
+        self.confirm.append(self.confirm_label)
+        self.confirm.append(revert)
+        self.confirm.append(keep)
+        self.confirm.set_visible(False)
+        box.append(self.confirm)
+
+        buttons = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=10, halign=Gtk.Align.END)
+        close = Gtk.Button(label="Fechar")
+        close.add_css_class("plain")
+        close.connect("clicked", lambda *_: self.close())
+        self.apply_btn = Gtk.Button(label="Aplicar")
+        self.apply_btn.add_css_class("apply")
+        self.apply_btn.connect("clicked", self.on_apply)
+        buttons.append(close)
+        buttons.append(self.apply_btn)
+        box.append(buttons)
+
+        self.previous_conf = None
+        self.countdown = 0
+        self.timer = None
+
+        key = Gtk.EventControllerKey()
+        key.connect("key-pressed", self.on_key)
+        self.add_controller(key)
+        self.connect("close-request", self.on_close_request)
+
+    def on_apply(self, _btn):
+        old_text = read_conf()
+        rules = parse_rules(old_text)
+        for card in self.cards:
+            w, h, r, s = card.selection()
+            rule = next((x for x in rules if rule_name(x) == card.name), None)
+            if rule is None:
+                rule = {"name": card.name}
+                rules.append(rule)
+            # Mantem os outros campos (x, y, rr, vrr...) como estavam
+            rule.update({"width": str(w), "height": str(h),
+                         "refresh": fmt_refresh(r), "scale": f"{s:g}"})
+        new_text = build_conf(rules)
+        if new_text == old_text:
+            return
+        self.previous_conf = old_text
+        apply_conf(new_text)
+
+        self.apply_btn.set_sensitive(False)
+        self.countdown = CONFIRM_SECONDS
+        self.update_confirm()
+        self.confirm.set_visible(True)
+        self.timer = GLib.timeout_add_seconds(1, self.tick)
+
+    def update_confirm(self):
+        self.confirm_label.set_text(
+            f"Manter estas configurações?\nVoltando à anterior em {self.countdown} s...")
+
+    def tick(self):
+        self.countdown -= 1
+        if self.countdown <= 0:
+            self.timer = None
+            self.revert()
+            return False
+        self.update_confirm()
+        return True
+
+    def stop_timer(self):
+        if self.timer:
+            GLib.source_remove(self.timer)
+            self.timer = None
+
+    def on_keep(self, _btn):
+        self.stop_timer()
+        self.previous_conf = None
+        self.confirm.set_visible(False)
+        self.apply_btn.set_sensitive(True)
+
+    def revert(self):
+        self.stop_timer()
+        if self.previous_conf is not None:
+            apply_conf(self.previous_conf)
+            self.previous_conf = None
+        self.confirm.set_visible(False)
+        self.apply_btn.set_sensitive(True)
+
+    def on_close_request(self, _win):
+        # Fechar sem confirmar = reverter (seguranca se a tela ficou ruim)
+        if self.previous_conf is not None:
+            self.revert()
+        return False
+
+    def on_key(self, _ctrl, keyval, _code, _state):
+        if keyval == Gdk.KEY_Escape:
+            self.close()
+            return True
+        return False
+
+
+class App(Gtk.Application):
+    def __init__(self):
+        super().__init__(application_id="io.voidbr.mango.display")
+
+    def do_activate(self):
+        # Abrir de novo (botao da barra ou atalho) com a janela aberta: fecha
+        if self.props.active_window:
+            self.quit()
+            return
+        win = DisplayWindow(self)
+        win.present()
+        # Clique fora da janela tambem fecha
+        subprocess.Popen(["voidbr-click-outside", str(os.getpid())])
+
+
+if __name__ == "__main__":
+    App().run(sys.argv)

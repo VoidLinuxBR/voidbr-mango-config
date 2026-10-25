@@ -1,0 +1,61 @@
+#!/usr/bin/env python3
+# ====================================================================
+# VoidBR Mango - Aba de categoria do menu de apps (modo script do rofi)
+# Uso (no modi do rofi):  Internet:voidbr-rofi-apps Network
+#                         Midia:voidbr-rofi-apps AudioVideo Audio Video
+# Lista os apps cujo .desktop declara alguma das categorias passadas
+# (padrao freedesktop): app novo cai sozinho na aba certa. Respeita
+# NoDisplay/Hidden, usa o nome traduzido e o icone do proprio app.
+# ====================================================================
+import os
+import subprocess
+import sys
+
+import gi
+
+gi.require_version("Gio", "2.0")
+from gi.repository import Gio
+
+try:  # GLib >= 2.86: DesktopAppInfo mudou para GioUnix
+    gi.require_version("GioUnix", "2.0")
+    from gi.repository import GioUnix as DesktopGio
+except (ImportError, ValueError):
+    DesktopGio = Gio
+
+
+def matching_apps(categories):
+    wanted = set(categories)
+    apps = []
+    for app in Gio.AppInfo.get_all():
+        if not isinstance(app, DesktopGio.DesktopAppInfo) or not app.should_show():
+            continue
+        cats = set(filter(None, (app.get_categories() or "").split(";")))
+        if cats & wanted:
+            apps.append(app)
+    return sorted(apps, key=lambda a: a.get_display_name().casefold())
+
+
+def launch(app_id):
+    app = DesktopGio.DesktopAppInfo.new(app_id)
+    if app is None:
+        return
+    # Fora do rofi: sem herdar a saida dele (senao o rofi espera o app fechar)
+    subprocess.Popen(["gio", "launch", app.get_filename()],
+                     stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL,
+                     stderr=subprocess.DEVNULL, start_new_session=True)
+
+
+def main():
+    categories = sys.argv[1:]
+    # Segunda chamada do rofi: o item escolhido (o id do .desktop vem no ROFI_INFO)
+    if os.environ.get("ROFI_RETV") == "1":
+        launch(os.environ.get("ROFI_INFO", ""))
+        return
+    for app in matching_apps(categories):
+        icon = app.get_icon()
+        icon_name = icon.to_string() if icon else "application-x-executable"
+        print(f"{app.get_display_name()}\0icon\x1f{icon_name}\x1finfo\x1f{app.get_id()}")
+
+
+if __name__ == "__main__":
+    main()

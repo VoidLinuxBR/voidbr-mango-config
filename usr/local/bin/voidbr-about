@@ -1,0 +1,18 @@
+#!/bin/sh
+# ====================================================================
+# VoidBR Mango - "Sobre o VoidBR" (botao  VoidBR da barra)
+# Mostra o fastfetch (sem logo) numa janela do yad, como no Waybar
+# original do voidbr-mango-config. Clicar de novo no botao fecha; clicar
+# fora tambem (voidbr-click-outside), como os outros popups da barra.
+# ====================================================================
+TITLE="Sobre o VoidBR"
+
+pkill -f "^yad --text-info --title=$TITLE" && exit 0
+
+# Tira os codigos de cor que sobram (o modulo de cores os manda mesmo com --pipe)
+fastfetch --logo none --pipe | sed 's/\x1b\[[0-9;]*m//g' |
+    yad --text-info --title="$TITLE" --width=680 --height=480 --wrap \
+        --fontname='monospace 10' --button=Fechar:0 &
+pid=$!
+voidbr-click-outside "$pid" >/dev/null 2>&1 &
+wait "$pid"

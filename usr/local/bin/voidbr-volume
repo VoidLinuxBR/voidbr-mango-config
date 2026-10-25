@@ -1,0 +1,270 @@
+#!/usr/bin/env python3
+# ====================================================================
+# VoidBR Mango - Popup de volume (GTK3 + gtk-layer-shell)
+# Abre logo abaixo da barra, centralizado no cursor (icone clicado):
+#   slider de volume + botao de mudo logo abaixo.
+# Fecha com Esc, clicando de novo no icone, quando o mouse sai do popup
+# ou se o mouse nem chegar ate ele. Nao fecha por perda de foco porque o
+# Mango usa sloppyfocus (o foco segue o mouse pelas outras janelas).
+# ====================================================================
+import json
+import os
+import re
+import subprocess
+
+import gi
+
+gi.require_version("Gtk", "3.0")
+gi.require_version("Gdk", "3.0")
+gi.require_version("GtkLayerShell", "0.1")
+from gi.repository import Gdk, GLib, Gtk, GtkLayerShell, Pango
+
+SINK = "@DEFAULT_AUDIO_SINK@"
+WIDTH = 300
+BAR_GAP = 2  # contado a partir da borda de baixo da barra (area reservada)
+LEAVE_GRACE_MS = 700   # tempo fora do popup antes de fechar
+NEVER_ENTER_MS = 5000  # fecha se o mouse nunca entrar
+
+# Paleta central (~/.config/voidbr/colors.ini, gerada por voidbr-theme)
+PALETTE_CSS = os.path.expanduser("~/.config/voidbr/colors.css")
+
+
+def themed(css):
+    try:
+        with open(PALETTE_CSS, "rb") as f:
+            return f.read() + css
+    except OSError:
+        return css
+
+
+CSS = b"""
+window {
+    background-color: transparent;
+}
+.popup {
+    background-color: alpha(@bg, 0.86);
+    border: 1px solid alpha(@accent, 0.45);
+    border-radius: 16px;
+    padding: 14px 16px;
+}
+.title {
+    color: @fg;
+    font-weight: bold;
+    font-size: 13px;
+}
+.device {
+    color: @fg_dim;
+    font-size: 11px;
+}
+.percent {
+    color: @accent;
+    font-weight: bold;
+    font-size: 13px;
+    min-width: 42px;
+}
+scale trough {
+    min-height: 8px;
+    border-radius: 4px;
+    background-color: @bg3;
+    border: none;
+}
+scale highlight {
+    border-radius: 4px;
+    background-color: @accent;
+}
+scale slider {
+    min-width: 16px;
+    min-height: 16px;
+    border-radius: 8px;
+    background-color: @fg;
+    border: 2px solid @accent;
+    box-shadow: none;
+}
+.popup.muted scale highlight {
+    background-color: @fg_dim;
+}
+.popup.muted .percent {
+    color: @fg_dim;
+}
+button.mute {
+    background-image: none;
+    background-color: @bg3;
+    color: @fg;
+    border: 1px solid @border;
+    border-radius: 10px;
+    padding: 6px 12px;
+    box-shadow: none;
+    text-shadow: none;
+}
+button.mute:hover {
+    background-color: alpha(@accent, 0.25);
+    border-color: @accent;
+}
+button.mute.active {
+    background-color: alpha(@red, 0.25);
+    border-color: @red;
+    color: @red;
+}
+"""
+
+
+def wpctl(*args):
+    return subprocess.run(["wpctl", *args], capture_output=True, text=True).stdout
+
+
+def read_state():
+    # "Volume: 0.48" ou "Volume: 0.48 [MUTED]"
+    out = wpctl("get-volume", SINK)
+    m = re.search(r"([\d.]+)", out)
+    vol = round(float(m.group(1)) * 100) if m else 0
+    return vol, "[MUTED]" in out
+
+
+def device_name():
+    m = re.search(r'node\.nick = "([^"]+)"', wpctl("inspect", SINK)) or \
+        re.search(r'node\.description = "([^"]+)"', wpctl("inspect", SINK))
+    return m.group(1) if m else "Saída padrão"
+
+
+def popup_left_margin():
+    # Centraliza no cursor, em coordenadas do monitor onde ele esta
+    try:
+        cur = json.loads(subprocess.run(["mmsg", "get", "cursorpos"], capture_output=True,
+                                        text=True, timeout=1).stdout)
+        mon = json.loads(subprocess.run(["mmsg", "get", "monitor", cur["monitor"]],
+                                        capture_output=True, text=True, timeout=1).stdout)
+        x = cur["x"] - mon["x"] - WIDTH / 2
+        return int(max(8, min(x, mon["width"] - WIDTH - 8)))
+    except Exception:
+        return None
+
+
+class VolumePopup(Gtk.Window):
+    def __init__(self):
+        super().__init__(title="Volume")
+        self.set_default_size(WIDTH, -1)
+
+        GtkLayerShell.init_for_window(self)
+        GtkLayerShell.set_layer(self, GtkLayerShell.Layer.OVERLAY)
+        GtkLayerShell.set_keyboard_mode(self, GtkLayerShell.KeyboardMode.ON_DEMAND)
+        GtkLayerShell.set_anchor(self, GtkLayerShell.Edge.TOP, True)
+        GtkLayerShell.set_margin(self, GtkLayerShell.Edge.TOP, BAR_GAP)
+        left = popup_left_margin()
+        if left is None:
+            GtkLayerShell.set_anchor(self, GtkLayerShell.Edge.RIGHT, True)
+            GtkLayerShell.set_margin(self, GtkLayerShell.Edge.RIGHT, 300)
+        else:
+            GtkLayerShell.set_anchor(self, GtkLayerShell.Edge.LEFT, True)
+            GtkLayerShell.set_margin(self, GtkLayerShell.Edge.LEFT, left)
+
+        provider = Gtk.CssProvider()
+        provider.load_from_data(themed(CSS))
+        Gtk.StyleContext.add_provider_for_screen(
+            Gdk.Screen.get_default(), provider, Gtk.STYLE_PROVIDER_PRIORITY_APPLICATION)
+
+        self.box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=10)
+        self.box.get_style_context().add_class("popup")
+        self.box.set_size_request(WIDTH, -1)
+        self.add(self.box)
+
+        # Cabecalho: titulo + dispositivo
+        title = Gtk.Label(label="󰕾  Volume", xalign=0)
+        title.get_style_context().add_class("title")
+        dev = Gtk.Label(label=device_name(), xalign=0, ellipsize=Pango.EllipsizeMode.END)
+        dev.get_style_context().add_class("device")
+        self.box.pack_start(title, False, False, 0)
+        self.box.pack_start(dev, False, False, 0)
+
+        # Slider + porcentagem
+        row = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=10)
+        self.scale = Gtk.Scale.new_with_range(Gtk.Orientation.HORIZONTAL, 0, 100, 1)
+        self.scale.set_draw_value(False)
+        self.scale.set_hexpand(True)
+        self.percent = Gtk.Label(xalign=1)
+        self.percent.get_style_context().add_class("percent")
+        row.pack_start(self.scale, True, True, 0)
+        row.pack_start(self.percent, False, False, 0)
+        self.box.pack_start(row, False, False, 0)
+
+        # Botao de mudo logo abaixo
+        self.mute_btn = Gtk.Button()
+        self.mute_btn.get_style_context().add_class("mute")
+        self.mute_btn.connect("clicked", self.on_mute)
+        self.box.pack_start(self.mute_btn, False, False, 0)
+
+        self.updating = False
+        self.close_timer = None
+        self.entered = False
+        self.refresh()
+        self.scale.connect("value-changed", self.on_scale)
+
+        self.connect("key-press-event", self.on_key)
+        self.add_events(Gdk.EventMask.ENTER_NOTIFY_MASK | Gdk.EventMask.LEAVE_NOTIFY_MASK)
+        self.connect("enter-notify-event", self.on_enter)
+        self.connect("leave-notify-event", self.on_leave)
+        self.connect("destroy", Gtk.main_quit)
+        self.schedule_close(NEVER_ENTER_MS)
+        # Acompanha mudancas feitas por fora (teclas de volume, scroll na barra)
+        GLib.timeout_add(500, self.refresh)
+
+    def refresh(self):
+        vol, muted = read_state()
+        self.updating = True
+        if abs(self.scale.get_value() - vol) >= 1:
+            self.scale.set_value(vol)
+        self.updating = False
+        self.percent.set_text(f"{vol}%")
+        ctx = self.box.get_style_context()
+        btn = self.mute_btn.get_style_context()
+        if muted:
+            ctx.add_class("muted")
+            btn.add_class("active")
+            self.mute_btn.set_label("󰝟  Som mudo — clique para ativar")
+        else:
+            ctx.remove_class("muted")
+            btn.remove_class("active")
+            self.mute_btn.set_label("󰖁  Silenciar")
+        return True
+
+    def on_scale(self, scale):
+        if self.updating:
+            return
+        vol = int(scale.get_value())
+        wpctl("set-volume", SINK, f"{vol / 100:.2f}")
+        self.percent.set_text(f"{vol}%")
+
+    def on_mute(self, _btn):
+        wpctl("set-mute", SINK, "toggle")
+        self.refresh()
+
+    def on_key(self, _win, event):
+        if event.keyval == Gdk.KEY_Escape:
+            self.destroy()
+        elif event.keyval == Gdk.KEY_m:
+            self.on_mute(None)
+        return False
+
+    def schedule_close(self, ms):
+        self.cancel_close()
+        self.close_timer = GLib.timeout_add(ms, self.destroy)
+
+    def cancel_close(self):
+        if self.close_timer:
+            GLib.source_remove(self.close_timer)
+            self.close_timer = None
+
+    def on_enter(self, _win, _event):
+        self.entered = True
+        self.cancel_close()
+
+    def on_leave(self, _win, event):
+        # Ignora a passagem entre os widgets de dentro do popup
+        if event.detail == Gdk.NotifyType.INFERIOR:
+            return
+        self.schedule_close(LEAVE_GRACE_MS)
+
+
+if __name__ == "__main__":
+    win = VolumePopup()
+    win.show_all()
+    Gtk.main()

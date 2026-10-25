@@ -1,0 +1,311 @@
+#!/usr/bin/env python3
+# ====================================================================
+# VoidBR Mango - Seletor Grafico de Wallpaper com Miniaturas (GTK4)
+# Exibe galeria visual de imagens para o usuario ver e escolher.
+# Miniaturas recortadas em 16:9 e guardadas em ~/.cache/voidbr/thumbs;
+# a janela abre na hora e as miniaturas sao preenchidas em segundo plano.
+# ====================================================================
+import hashlib
+import math
+import os
+import sys
+import shutil
+import subprocess
+import threading
+import gi
+
+gi.require_version("Gtk", "4.0")
+gi.require_version("Gdk", "4.0")
+gi.require_version("GdkPixbuf", "2.0")
+from gi.repository import Gtk, Gdk, GdkPixbuf, GLib, GObject
+
+WALLPAPER_DIR = os.path.expanduser("~/Imagens/wallpaper")
+# Tambem lista os wallpapers do VoidBR (usuario novo ainda nao tem os seus)
+EXTRA_DIRS = ["/usr/share/backgrounds/mango", "/usr/share/backgrounds/voidbr",
+              os.path.expanduser("~/.local/share/backgrounds")]
+CURRENT_LINK = os.path.expanduser("~/.local/share/backgrounds/current.png")
+THUMB_DIR = os.path.expanduser("~/.cache/voidbr/thumbs")
+THUMB_W, THUMB_H = 220, 124   # tamanho na tela
+THUMB_SCALE = 2               # gera em 2x para ficar nitido com escala 1.5/2
+
+# Paleta central (~/.config/voidbr/colors.ini, gerada por voidbr-theme)
+PALETTE_CSS = os.path.expanduser("~/.config/voidbr/colors.css")
+
+
+def themed(css):
+    try:
+        with open(PALETTE_CSS, "rb") as f:
+            return f.read() + css
+    except OSError:
+        return css
+
+CSS = b"""
+window {
+    background-color: alpha(@bg, 0.86);
+    border: none;
+    border-radius: 16px;
+}
+.header-title {
+    font-size: 18px;
+    font-weight: bold;
+    color: @accent;
+    margin-bottom: 2px;
+}
+.header-sub {
+    font-size: 12px;
+    color: @fg_dim;
+    margin-bottom: 12px;
+}
+.thumb-card {
+    background-color: alpha(@bg3, 0.7);
+    border: 2px solid @bg3;
+    border-radius: 12px;
+    padding: 8px;
+    margin: 6px;
+    transition: all 200ms ease;
+}
+.thumb-card:hover {
+    background-color: alpha(@accent, 0.2);
+    border-color: @accent;
+}
+.thumb-card.active {
+    border-color: @green;
+    background-color: alpha(@green, 0.2);
+    box-shadow: 0 0 10px alpha(@green, 0.4);
+}
+.thumb-label {
+    font-size: 12px;
+    font-weight: 500;
+    color: @fg;
+    margin-top: 6px;
+}
+"""
+
+def thumb_path(img_path):
+    # Muda de nome se a imagem for alterada (caminho + data + tamanho)
+    st = os.stat(img_path)
+    key = f"{os.path.realpath(img_path)}:{st.st_mtime_ns}:{st.st_size}"
+    return os.path.join(THUMB_DIR, hashlib.sha1(key.encode()).hexdigest() + ".png")
+
+
+def make_thumb(img_path):
+    """Gera (se preciso) a miniatura recortada no centro em 16:9 e devolve o caminho."""
+    out = thumb_path(img_path)
+    if os.path.exists(out):
+        return out
+    tw, th = THUMB_W * THUMB_SCALE, THUMB_H * THUMB_SCALE
+    _fmt, w, h = GdkPixbuf.Pixbuf.get_file_info(img_path)
+    # "cover": escala ate cobrir a miniatura inteira, depois corta o excesso
+    scale = max(tw / w, th / h)
+    sw, sh = max(tw, math.ceil(w * scale)), max(th, math.ceil(h * scale))
+    pix = GdkPixbuf.Pixbuf.new_from_file_at_scale(img_path, sw, sh, False)
+    crop = pix.new_subpixbuf((sw - tw) // 2, (sh - th) // 2, tw, th)
+    os.makedirs(THUMB_DIR, exist_ok=True)
+    tmp = out + ".tmp"
+    crop.savev(tmp, "png", [], [])
+    os.replace(tmp, out)
+    return out
+
+
+class ThumbPaintable(GObject.Object, Gdk.Paintable):
+    """Miniatura em 2x que se apresenta ao GTK como 220x124 (nitida em HiDPI)."""
+
+    def __init__(self, texture):
+        super().__init__()
+        self.texture = texture
+
+    def do_get_intrinsic_width(self):
+        return THUMB_W
+
+    def do_get_intrinsic_height(self):
+        return THUMB_H
+
+    def do_snapshot(self, snapshot, width, height):
+        self.texture.snapshot(snapshot, width, height)
+
+
+def apply_wallpaper(path):
+    if not os.path.isfile(path):
+        return
+    real = os.path.realpath(path)
+    os.makedirs(os.path.dirname(CURRENT_LINK), exist_ok=True)
+    try:
+        if os.path.islink(CURRENT_LINK) or os.path.exists(CURRENT_LINK):
+            os.remove(CURRENT_LINK)
+        os.symlink(real, CURRENT_LINK)
+    except Exception:
+        pass
+
+    # Se o tema de cores for o "Wallpaper (automatico)", gera as cores da nova imagem
+    subprocess.Popen(["voidbr-theme", "--if-wallpaper"],
+                     stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, start_new_session=True)
+
+    # Reinicia o swaybg no ambiente wayland do usuario
+    wdisp = os.environ.get("WAYLAND_DISPLAY", "wayland-0")
+    xruntime = os.environ.get("XDG_RUNTIME_DIR", f"/run/user/{os.getuid()}")
+    env = dict(os.environ, WAYLAND_DISPLAY=wdisp, XDG_RUNTIME_DIR=xruntime)
+
+    # awww (transicao animada) se o daemon estiver rodando, senao swaybg
+    awww_ok = shutil.which("awww") and subprocess.run(
+        ["awww", "query"], capture_output=True).returncode == 0
+    if awww_ok:
+        subprocess.Popen(["awww", "img", real, "--transition-type", "grow",
+                          "--transition-duration", "1"], env=env)
+        return
+
+    subprocess.run(["pkill", "-x", "swaybg"])
+    import time
+    time.sleep(0.15)
+    subprocess.Popen(["swaybg", "-i", real, "-m", "fill"], env=env)
+
+class WallpaperPicker(Gtk.ApplicationWindow):
+    def __init__(self, app):
+        super().__init__(application=app, title="Galeria de Papéis de Parede")
+        self.set_default_size(780, 520)
+        self.set_resizable(False)
+
+        provider = Gtk.CssProvider()
+        provider.load_from_data(themed(CSS))
+        Gtk.StyleContext.add_provider_for_display(Gdk.Display.get_default(), provider, Gtk.STYLE_PROVIDER_PRIORITY_APPLICATION)
+
+        main_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=8)
+        main_box.set_margin_top(16)
+        main_box.set_margin_bottom(16)
+        main_box.set_margin_start(16)
+        main_box.set_margin_end(16)
+        self.set_child(main_box)
+
+        lbl_title = Gtk.Label(label="󰸉  Galeria de Papéis de Parede")
+        lbl_title.add_css_class("header-title")
+        main_box.append(lbl_title)
+
+        lbl_sub = Gtk.Label(label="Clique na imagem para aplicar instantaneamente (ou Esc para fechar)")
+        lbl_sub.add_css_class("header-sub")
+        main_box.append(lbl_sub)
+
+        # Scrolled window
+        scrolled = Gtk.ScrolledWindow()
+        scrolled.set_vexpand(True)
+        # So rolagem vertical: a janela fica com a largura das 3 colunas
+        scrolled.set_policy(Gtk.PolicyType.NEVER, Gtk.PolicyType.AUTOMATIC)
+        main_box.append(scrolled)
+
+        flowbox = Gtk.FlowBox()
+        flowbox.set_valign(Gtk.Align.START)
+        flowbox.set_min_children_per_line(3)
+        flowbox.set_max_children_per_line(3)
+        flowbox.set_homogeneous(True)
+        flowbox.set_selection_mode(Gtk.SelectionMode.NONE)
+        scrolled.set_child(flowbox)
+
+        current_target = os.path.realpath(CURRENT_LINK) if os.path.exists(CURRENT_LINK) else ""
+
+        # Encontra imagens
+        valid_exts = (".png", ".jpg", ".jpeg", ".webp", ".avif")
+        images = []
+        seen = set()
+        for folder in [WALLPAPER_DIR] + EXTRA_DIRS:
+            if not os.path.isdir(folder):
+                continue
+            for f in sorted(os.listdir(folder)):
+                path = os.path.join(folder, f)
+                real = os.path.realpath(path)
+                # current.png e so o link para o wallpaper em uso
+                if f == "current.png" or real in seen or not f.lower().endswith(valid_exts):
+                    continue
+                seen.add(real)
+                images.append(path)
+
+        pending = []
+        for img_path in images:
+            btn = Gtk.Button()
+            btn.add_css_class("thumb-card")
+            if os.path.realpath(img_path) == current_target:
+                btn.add_css_class("active")
+
+            vbox = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=4)
+
+            # Espaco da miniatura; a imagem chega depois (load_thumbs)
+            pic = Gtk.Picture()
+            pic.set_size_request(THUMB_W, THUMB_H)
+            vbox.append(pic)
+            pending.append((img_path, pic))
+
+            name = os.path.basename(img_path)
+            if len(name) > 28:
+                name = name[:25] + "..."
+            lbl_name = Gtk.Label(label=name)
+            lbl_name.add_css_class("thumb-label")
+            vbox.append(lbl_name)
+
+            btn.set_child(vbox)
+            btn.connect("clicked", self.on_select, img_path)
+            flowbox.append(btn)
+
+        if not images:
+            vazio = Gtk.Label(label=f"Nenhuma imagem em {WALLPAPER_DIR.replace(os.path.expanduser('~'), '~')}")
+            vazio.add_css_class("header-sub")
+            flowbox.append(vazio)
+
+        threading.Thread(target=self.load_thumbs, args=(pending,), daemon=True).start()
+
+        # Teclado Esc
+        key_ctrl = Gtk.EventControllerKey()
+        key_ctrl.connect("key-pressed", self.on_key)
+        self.add_controller(key_ctrl)
+
+    def load_thumbs(self, pending):
+        # Roda fora da thread da interface; so o set_paintable volta para ela
+        keep = set()
+        for img_path, pic in pending:
+            try:
+                thumb = make_thumb(img_path)
+            except Exception:
+                continue
+            keep.add(os.path.basename(thumb))
+            GLib.idle_add(self.show_thumb, pic, thumb)
+        # Apaga miniaturas de imagens que sairam da pasta
+        try:
+            for f in os.listdir(THUMB_DIR):
+                if f not in keep:
+                    os.remove(os.path.join(THUMB_DIR, f))
+        except OSError:
+            pass
+
+    def show_thumb(self, pic, thumb):
+        try:
+            pic.set_paintable(ThumbPaintable(Gdk.Texture.new_from_filename(thumb)))
+        except Exception:
+            pass
+        return False
+
+    def on_select(self, btn, path):
+        apply_wallpaper(path)
+        self.close()
+
+    def on_key(self, ctrl, keyval, keycode, state):
+        if keyval == Gdk.KEY_Escape:
+            self.close()
+            return True
+        return False
+
+class App(Gtk.Application):
+    def __init__(self):
+        super().__init__(application_id="io.voidbr.mango.wallpaperpicker")
+
+    def do_activate(self):
+        # Abrir de novo (botao da barra ou atalho) com a janela aberta: fecha
+        if self.props.active_window:
+            self.quit()
+            return
+        win = WallpaperPicker(self)
+        win.present()
+        # Clique fora da janela tambem fecha
+        subprocess.Popen(["voidbr-click-outside", str(os.getpid())])
+
+if __name__ == "__main__":
+    if len(sys.argv) > 1 and os.path.isfile(sys.argv[1]):
+        apply_wallpaper(sys.argv[1])
+        sys.exit(0)
+    app = App()
+    app.run(sys.argv)

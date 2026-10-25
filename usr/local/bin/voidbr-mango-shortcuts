@@ -1,5 +1,8 @@
 #!/usr/bin/env python3
 import gettext
+import os
+import subprocess
+import sys
 import gi
 
 gi.require_version("Gtk", "4.0")
@@ -16,104 +19,171 @@ SHORTCUTS = [
     (_("Sistema"), [
         ("Super + R", _("Recarregar configuração")),
         ("Super + M", _("Encerrar sessão")),
+        ("Super + Esc", _("Bloquear tela (hyprlock)")),
+        ("Super + F1", _("Janela de ajuda de atalhos")),
+        ("Super + Shift + T", _("Trocar tema de cores")),
     ]),
     (_("Aplicativos"), [
-        ("Alt + Return", _("Abrir um terminal")),
-        ("Alt + Space", _("Abrir lançador (wofi)")),
+        ("Super / Alt + Return", _("Abrir terminal (foot)")),
+        ("Super / Alt + Space", _("Lançador de aplicativos (Rofi)")),
+        ("Super / Alt + W", _("Galeria de Papéis de Parede")),
+        ("Super + V", _("Histórico da área de transferência")),
     ]),
-    (_("Foco e Janelas"), [
-        ("Alt + ← ↑ ↓ →", _("Mover foco")),
+    (_("Captura e Gravação"), [
+        ("Print", _("Captura da tela inteira (salva e copia)")),
+        ("Super + Shift + S", _("Captura de área (abre no satty para anotar)")),
+        ("Super + Shift + R", _("Menu de captura e gravação; gravando: parar e salvar")),
+    ]),
+    (_("Janelas e Foco"), [
+        ("Super / Alt + Q", _("Fechar janela ativa")),
+        ("Super / Alt + F", _("Alternar tela cheia")),
+        ("Super / Alt + Shift + F", _("Tela cheia falsa (dentro do espaço da janela)")),
+        ("Super / Alt + A", _("Alternar maximizar")),
+        ("Super / Alt + \\", _("Alternar modo flutuante")),
         ("Super + Tab", _("Próxima janela")),
-        ("Alt + Q", _("Fechar janela")),
-        ("Alt + \\", _("Alternar modo flutuante")),
-        ("Alt + A", _("Alternar maximizar")),
-        ("Alt + F", _("Alternar tela cheia")),
-        ("Alt + Shift + F", _("Alternar tela cheia fake")),
+        ("Alt + Tab", _("Saltar entre janelas")),
+        ("Alt + ← ↑ ↓ →", _("Mover foco por direção")),
+        ("Super + Shift + ← ↑ ↓ →", _("Trocar janela de lugar")),
         ("Super + I", _("Minimizar janela")),
-        ("Super + Shift + I", _("Restaurar minimizada")),
-        ("Super + G", _("Toggle global")),
-        ("Super + O", _("Toggle overlay")),
-    ]),
-    (_("Mover e Redimensionar"), [
-        ("Ctrl + Shift + ← ↑ ↓ →", _("Mover janela")),
+        ("Super + Shift + I", _("Restaurar janela minimizada")),
+        ("Super + G", _("Janela visível em todas as tags")),
+        ("Super + O", _("Janela sempre por cima (overlay)")),
+        ("Alt + Z", _("Mostrar / esconder o scratchpad")),
+        ("Ctrl + Shift + ← ↑ ↓ →", _("Mover janela flutuante")),
         ("Ctrl + Alt + ← ↑ ↓ →", _("Redimensionar janela")),
     ]),
-    (_("Monitores e Tags"), [
-        ("Alt + Shift + ← →", _("Focar outro monitor")),
-        ("Super + Alt + ← →", _("Mover tag para monitor")),
-        ("Ctrl + 1..9", _("Ir para a tag")),
-        ("Alt + 1..9", _("Mover janela para a tag")),
+    (_("Workspaces / Tags"), [
+        ("Ctrl + 1..9", _("Ir para tag")),
+        ("Alt + 1..9", _("Mover janela para tag")),
+        ("Super + ← / →", _("Tag anterior / próxima")),
+        ("Ctrl + ← / →", _("Tag anterior / próxima com janelas")),
+        ("Ctrl + Super + ← / →", _("Levar janela para a tag vizinha")),
+        ("Alt + Shift + ← / →", _("Focar outro monitor")),
+        ("Super + Alt + ← / →", _("Levar janela para outro monitor")),
     ]),
-    (_("Layouts"), [
-        ("Super + N", _("Alternar layout")),
-        ("Alt + E", _("Resetar proporção")),
+    (_("Layouts e Tiling"), [
+        ("Super / Alt + L", _("Abrir menu gráfico de layouts")),
+        ("Super + N", _("Ciclar para o próximo layout")),
+        ("Alt + E", _("Resetar proporção no Scroller")),
         ("Alt + X", _("Ciclar presets de proporção")),
-        ("Alt + Shift + Return", _("Dwindle: alternar split")),
-        ("Alt + Super + Ctrl + ← ↑ ↓ →", _("Scroller: stack")),
-    ]),
-    (_("Scratchpad"), [
-        ("Alt + Z", _("Exibir/Ocultar Scratchpad")),
-    ]),
-    (_("Espaçamento (Gaps)"), [
-        ("Alt + Shift + X", _("Aumentar gaps")),
-        ("Alt + Shift + Z", _("Diminuir gaps")),
-        ("Alt + Shift + R", _("Ativar/Desativar gaps")),
-    ]),
-    (_("Multimídia"), [
-        ("XF86AudioRaiseVolume", _("Aumentar volume")),
-        ("XF86AudioLowerVolume", _("Diminuir volume")),
-        ("XF86AudioMute", _("Mudo")),
-        ("XF86AudioPlay", _("Play/Pause")),
-        ("XF86AudioNext", _("Próxima")),
-        ("XF86AudioPrev", _("Anterior")),
-    ]),
-    (_("Mouse"), [
-        ("Super + Clique Esq.", _("Mover janela")),
-        ("Super + Clique Dir.", _("Redimensionar janela")),
-        ("Clique Meio", _("Alternar maximizar")),
+        ("Ctrl + Alt + Super + ← ↑ ↓ →", _("Scroller: empilhar janela")),
+        ("Alt + Shift + Return", _("Dwindle: alternar direção do split")),
+        ("Alt + Shift + X / Z", _("Aumentar / diminuir espaçamento")),
+        ("Alt + Shift + R", _("Ligar / desligar espaçamento")),
     ]),
 ]
 
+# Paleta central (~/.config/voidbr/colors.ini, gerada por voidbr-theme)
+PALETTE_CSS = os.path.expanduser("~/.config/voidbr/colors.css")
+
+
+def themed(css):
+    try:
+        with open(PALETTE_CSS, "rb") as f:
+            return f.read() + css
+    except OSError:
+        return css
+
 CSS = b"""
-window { background:#202225; }
-headerbar { background:#2b2d31; }
-.title { font-size:18px; font-weight:bold; }
-.key { font-family:Monospace; font-weight:bold; color:#8be9fd; }
-.desc { color:#f8f8f2; }
-.section { font-weight:bold; color:#8be9fd; margin-top:6px; margin-bottom:2px; }
-list row { padding:0; }
+window {
+    background-color: alpha(@bg, 0.86);
+    border: none;
+    border-radius: 16px;
+}
+headerbar {
+    background-color: @bg2;
+    color: @fg;
+    border-bottom: 1px solid @bg3;
+}
+.title {
+    font-size: 16px;
+    font-weight: bold;
+    color: @accent;
+}
+searchentry {
+    background-color: @bg3;
+    color: @fg;
+    border: 1px solid @border;
+    border-radius: 10px;
+    padding: 6px;
+}
+searchentry:focus-within {
+    border-color: @accent;
+}
+scrolledwindow {
+    background-color: transparent;
+}
+listview, list, listbox {
+    background-color: transparent;
+}
+list row {
+    background-color: alpha(@bg3, 0.6);
+    border: 1px solid @bg3;
+    border-radius: 8px;
+    margin: 2px 0px;
+    padding: 6px 12px;
+}
+list row:hover {
+    background-color: alpha(@accent, 0.2);
+    border-color: @accent;
+}
+.section {
+    font-size: 14px;
+    font-weight: bold;
+    color: @orange;
+    margin-top: 12px;
+    margin-bottom: 4px;
+}
+.key {
+    font-family: monospace;
+    font-weight: bold;
+    color: @cyan;
+    background: rgba(0, 0, 0, 0.4);
+    padding: 2px 8px;
+    border-radius: 6px;
+    border: 1px solid alpha(@cyan, 0.3);
+}
+.desc {
+    color: @fg;
+    font-size: 13px;
+}
 """
 
 class Win(Gtk.ApplicationWindow):
     def __init__(self, app):
         super().__init__(application=app, title=_("Atalhos do VoidBR Mango"))
-        self.set_default_size(760, 600)
+        self.set_default_size(720, 560)
         self.set_resizable(False)
 
         css = Gtk.CssProvider()
-        css.load_from_data(CSS)
+        css.load_from_data(themed(CSS))
         Gtk.StyleContext.add_provider_for_display(
             Gdk.Display.get_default(), css,
             Gtk.STYLE_PROVIDER_PRIORITY_APPLICATION)
 
         hb = Gtk.HeaderBar()
-        title = Gtk.Label(label=_("Atalhos do VoidBR Mango"))
+        title = Gtk.Label(label=_("󰘥 Atalhos do VoidBR Mango"))
         title.add_css_class("title")
         hb.set_title_widget(title)
         self.set_titlebar(hb)
 
         root = Gtk.Box(orientation=Gtk.Orientation.VERTICAL,
-                       spacing=6,
-                       margin_top=10, margin_bottom=10,
-                       margin_start=12, margin_end=12)
+                       spacing=8,
+                       margin_top=12, margin_bottom=12,
+                       margin_start=16, margin_end=16)
 
         self.search = Gtk.SearchEntry()
-        self.search.set_placeholder_text(_("Pesquisar atalhos..."))
+        self.search.set_placeholder_text(_("Pesquisar atalho..."))
         root.append(self.search)
+
+        scrolled = Gtk.ScrolledWindow()
+        scrolled.set_vexpand(True)
+        root.append(scrolled)
 
         self.listbox = Gtk.ListBox()
         self.listbox.set_selection_mode(Gtk.SelectionMode.NONE)
         self.rows = []
+        scrolled.set_child(self.listbox)
 
         self.search.connect("search-changed", self.filter_rows)
 
@@ -124,63 +194,60 @@ class Win(Gtk.ApplicationWindow):
             row = Gtk.ListBoxRow(selectable=False)
             row.set_child(lbl)
             self.listbox.append(row)
-            self.rows.append((row, section.lower(), True))
+            self.rows.append((row, section.lower()))
 
             for key, desc in items:
-                h = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=16,
-                            margin_top=1, margin_bottom=1,
-                            margin_start=6, margin_end=6)
-                k = Gtk.Label(label=key, xalign=0)
-                k.add_css_class("key")
-                k.set_size_request(260, -1)
-                d = Gtk.Label(label=desc, xalign=0)
-                d.add_css_class("desc")
-                h.append(k)
-                h.append(d)
+                box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=12)
+
+                lbl_k = Gtk.Label(label=key, xalign=0)
+                lbl_k.add_css_class("key")
+                lbl_k.set_size_request(240, -1)
+                box.append(lbl_k)
+
+                lbl_d = Gtk.Label(label=desc, xalign=0)
+                lbl_d.add_css_class("desc")
+                lbl_d.set_hexpand(True)
+                box.append(lbl_d)
+
                 r = Gtk.ListBoxRow(selectable=False)
-                r.set_child(h)
+                r.set_child(box)
                 self.listbox.append(r)
-                self.rows.append((r, (key + " " + desc).lower(), False))
+                self.rows.append((r, f"{key} {desc}".lower()))
 
-        sw = Gtk.ScrolledWindow(vexpand=True)
-        sw.set_child(self.listbox)
-        root.append(sw)
-
-        btn = Gtk.Button(label=_("Fechar"))
-        btn.connect("clicked", lambda *_: self.close())
-        root.append(btn)
+        key_ctrl = Gtk.EventControllerKey()
+        key_ctrl.connect("key-pressed", self.on_key)
+        self.add_controller(key_ctrl)
 
         self.set_child(root)
 
-        ctrl = Gtk.EventControllerKey()
-        ctrl.connect("key-pressed", self.on_key)
-        self.add_controller(ctrl)
-
-    def filter_rows(self, entry):
-        txt = entry.get_text().lower().strip()
-        visible = False
-        for row, content, is_section in reversed(self.rows):
-            if is_section:
-                row.set_visible(visible or txt == "")
-                visible = False
-            else:
-                ok = txt in content
-                row.set_visible(ok)
-                if ok:
-                    visible = True
-
-    def on_key(self, controller, keyval, keycode, state):
+    def on_key(self, ctrl, keyval, keycode, state):
         if keyval == Gdk.KEY_Escape:
             self.close()
             return True
         return False
 
+    def filter_rows(self, entry):
+        text = entry.get_text().lower().strip()
+        for row, content in self.rows:
+            if not text or text in content:
+                row.set_visible(True)
+            else:
+                row.set_visible(False)
+
 class App(Gtk.Application):
     def __init__(self):
-        super().__init__(application_id="org.voidbr.shortcuts")
+        super().__init__(application_id="io.voidbr.mango.shortcuts")
 
     def do_activate(self):
-        Win(self).present()
+        # Abrir de novo (botao da barra ou atalho) com a janela aberta: fecha
+        if self.props.active_window:
+            self.quit()
+            return
+        win = Win(self)
+        win.present()
+        # Clique fora da janela tambem fecha
+        subprocess.Popen(["voidbr-click-outside", str(os.getpid())])
 
 if __name__ == "__main__":
-    App().run()
+    app = App()
+    app.run(sys.argv)

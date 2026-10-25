@@ -1,0 +1,390 @@
+#!/usr/bin/env python3
+# ====================================================================
+# VoidBR - Aplica a paleta central (~/.config/voidbr/colors.ini)
+# Gera os arquivos de cores de cada programa e recarrega o que der.
+# Uso: voidbr-theme            -> reaplica ~/.config/voidbr/colors.ini
+#      voidbr-theme <tema>     -> usa ~/.config/voidbr/themes/<tema>.ini
+#      voidbr-theme --menu     -> escolhe o tema no rofi
+#      voidbr-theme --wallpaper [esquema] -> tema a partir do wallpaper (matugen)
+#                                ex.: voidbr-theme --wallpaper scheme-vibrant
+#      voidbr-theme --list     -> lista os temas prontos
+# ====================================================================
+import json
+import os
+import subprocess
+import sys
+import time
+
+HOME = os.path.expanduser("~")
+CONF = os.path.join(HOME, ".config")
+PALETTE = os.path.join(CONF, "voidbr", "colors.ini")
+THEMES = os.path.join(CONF, "voidbr", "themes")
+WALLPAPER = os.path.join(HOME, ".local", "share", "backgrounds", "current.png")
+MATUGEN_CONF = os.path.join(CONF, "voidbr", "matugen.toml")
+WALL_NAME = "Wallpaper (automático)"
+WALL_SCHEME_FILE = os.path.join(CONF, "voidbr", "wallpaper-scheme")
+DEFAULT_SCHEME = "scheme-tonal-spot"
+
+# Esquemas do matugen mostrados no submenu "Wallpaper"
+SCHEMES = [
+    ("scheme-tonal-spot", "Equilibrado", "padrão do Android, tons suaves"),
+    ("scheme-vibrant", "Vibrante", "cores mais saturadas"),
+    ("scheme-expressive", "Expressivo", "mistura tons inesperados"),
+    ("scheme-content", "Fiel à imagem", "segue as cores reais do wallpaper"),
+    ("scheme-fidelity", "Fidelidade máxima", "ainda mais próximo da imagem"),
+    ("scheme-fruit-salad", "Salada de frutas", "bem colorido"),
+    ("scheme-rainbow", "Arco-íris", "destaque colorido, fundo neutro"),
+    ("scheme-neutral", "Neutro", "quase sem cor"),
+    ("scheme-monochrome", "Monocromático", "tons de cinza"),
+]
+
+# Papel de cada cor da paleta no esquema Material You do matugen.
+# Fundos e textos vêm da cor DOMINANTE do wallpaper; destaque e cores de apoio
+# vêm da cor MAIS VIVA (ex.: céu azul-marinho + luz dourada -> fundo azul, destaque dourado).
+ACCENT_KEYS = {"accent", "blue", "cyan", "teal", "green", "yellow", "orange", "red", "magenta"}
+MATUGEN_ROLES = {
+    "black": "surface_container_lowest", "bg2": "surface_container_lowest",
+    "bg": "surface", "bg_hl": "surface_container_low", "bg3": "surface_container",
+    "sel": "surface_container_highest", "border": "outline_variant",
+    "fg": "on_surface", "fg_alt": "on_surface_variant", "fg_dim": "outline",
+    "accent": "primary",
+    # custom_colors de ~/.config/voidbr/matugen.toml
+    "blue": "blue", "cyan": "cyan", "teal": "teal", "green": "green",
+    "yellow": "yellow", "orange": "orange", "red": "red", "magenta": "magenta",
+}
+PALETTE_HEADER = """# ===================================================================
+# VoidBR - Paleta de cores ativa
+# Trocar de tema: voidbr-theme --menu  (ou clique-direito em 󰔎 na barra)
+# Tema proprio: edite as cores abaixo e rode  voidbr-theme
+# Para guardar como tema pronto: copie para ~/.config/voidbr/themes/<nome>.ini
+# ===================================================================
+"""
+HEADER = "GERADO POR voidbr-theme - edite ~/.config/voidbr/colors.ini"
+
+REQUIRED = ["black", "bg2", "bg", "bg_hl", "bg3", "sel", "border", "fg", "fg_alt",
+            "fg_dim", "accent", "blue", "cyan", "teal", "green", "yellow", "orange",
+            "red", "magenta"]
+
+
+def load_palette():
+    c = {}
+    with open(PALETTE) as f:
+        for line in f:
+            line = line.strip()
+            if not line or line.startswith("#") or "=" not in line:
+                continue
+            key, val = line.split("=", 1)
+            # "accent=#7aa2f7  # comentario" -> "#7aa2f7"
+            c[key.strip()] = val.split()[0]
+    missing = [k for k in REQUIRED if k not in c]
+    if missing:
+        sys.exit(f"Faltam cores em {PALETTE}: {', '.join(missing)}")
+    return c
+
+
+def write(path, text):
+    os.makedirs(os.path.dirname(path), exist_ok=True)
+    with open(path, "w") as f:
+        f.write(text)
+    print("  ✓", path.replace(HOME, "~"))
+
+
+def theme_name(path):
+    with open(path) as f:
+        first = f.readline().strip()
+    return first[len("# Tema:"):].strip() if first.startswith("# Tema:") else os.path.basename(path)[:-4]
+
+
+def list_themes():
+    files = sorted(f for f in os.listdir(THEMES) if f.endswith(".ini"))
+    return [(f[:-4], theme_name(os.path.join(THEMES, f))) for f in files]
+
+
+def current_theme():
+    with open(PALETTE) as f:
+        for line in f:
+            if line.startswith("# Tema:"):
+                return line[len("# Tema:"):].strip()
+    return "Personalizado"
+
+
+def select_theme(slug):
+    src = os.path.join(THEMES, f"{slug}.ini")
+    if not os.path.isfile(src):
+        sys.exit(f"Tema '{slug}' nao existe. Temas: {', '.join(s for s, _ in list_themes())}")
+    with open(src) as f:
+        body = f.read()
+    with open(PALETTE, "w") as f:
+        f.write(PALETTE_HEADER + "\n" + body)
+
+
+def saved_scheme():
+    try:
+        with open(WALL_SCHEME_FILE) as f:
+            scheme = f.read().strip()
+    except OSError:
+        return DEFAULT_SCHEME
+    return scheme if any(scheme == sid for sid, _, _ in SCHEMES) else DEFAULT_SCHEME
+
+
+def scheme_label(scheme):
+    return next(label for sid, label, _ in SCHEMES if sid == scheme)
+
+
+def generate_from_wallpaper(scheme=None):
+    if scheme is None:
+        scheme = saved_scheme()
+    elif not any(scheme == sid for sid, _, _ in SCHEMES):
+        sys.exit(f"Esquema '{scheme}' nao existe. Opcoes: {', '.join(s for s, _, _ in SCHEMES)}")
+    with open(WALL_SCHEME_FILE, "w") as f:
+        f.write(scheme + "\n")
+    wall = os.path.realpath(WALLPAPER)
+
+    def run_matugen(pick):
+        res = subprocess.run(
+            ["matugen", "-c", MATUGEN_CONF, "image", wall, "-t", scheme, "-m", "dark", "--dry-run",
+             "-j", "hex", "--fallback-color", "#7aa2f7", *pick],
+            capture_output=True, text=True, stdin=subprocess.DEVNULL)
+        if res.returncode != 0:
+            sys.exit(f"matugen falhou:\n{res.stderr}")
+        return json.loads(res.stdout)["colors"]
+
+    base = run_matugen(["--source-color-index", "0"])     # cor dominante
+    vivid = run_matugen(["--prefer", "saturation"])       # cor mais viva
+    lines = [f"# Tema: {WALL_NAME}",
+             f"# Gerado pelo matugen ({scheme}) a partir de {wall.replace(HOME, '~')}"]
+    lines += [f"{key}={(vivid if key in ACCENT_KEYS else base)[role]['dark']['color']}"
+              for key, role in MATUGEN_ROLES.items()]
+    write(os.path.join(THEMES, "wallpaper.ini"), "\n".join(lines) + "\n")
+    select_theme("wallpaper")
+
+
+def rofi(prompt, mesg, lines):
+    style = f'entry {{ placeholder: "Pesquisar..."; }} listview {{ lines: {len(lines)}; }}'
+    res = subprocess.run(["voidbr-rofi", "-dmenu", "-i", "-p", prompt, "-mesg", mesg, "-theme-str", style],
+                         input="\n".join(lines), capture_output=True, text=True)
+    return res.stdout.strip()
+
+
+def scheme_menu():
+    cur = saved_scheme() if current_theme() == WALL_NAME else None
+    lines = [f"{'●' if sid == cur else '○'}  {label} — {desc}" for sid, label, desc in SCHEMES]
+    choice = rofi("Esquema", "Cores tiradas do wallpaper (Esc cancela)", lines)
+    label = choice[3:].split(" — ")[0].strip()
+    return next((sid for sid, lab, _ in SCHEMES if lab == label), None)
+
+
+def menu():
+    # "Wallpaper" sempre aparece primeiro, mesmo antes de ser gerado
+    themes = [("wallpaper", WALL_NAME)] + [t for t in list_themes() if t[0] != "wallpaper"]
+    cur = current_theme()
+    lines = [f"{'●' if name == cur else '○'}  {name}" for _, name in themes]
+    if cur == WALL_NAME:
+        cur_label = f"{cur} · {scheme_label(saved_scheme())}"
+        lines[0] += f"  ({scheme_label(saved_scheme())})"
+    else:
+        cur_label = cur
+    choice = rofi("Tema", f"Atual: {cur_label}", lines)[3:].split("  (")[0].strip()
+    slug = next((s for s, name in themes if name == choice), None)
+    if slug is None:
+        sys.exit(0)
+    if slug == "wallpaper":
+        scheme = scheme_menu()
+        if scheme is None:
+            sys.exit(0)
+        generate_from_wallpaper(scheme)
+        return f"{WALL_NAME} · {scheme_label(scheme)}"
+    else:
+        select_theme(slug)
+    return choice
+
+
+def restart_waybar():
+    # Reinicia em vez de SIGUSR2: duas recargas seguidas derrubam o Waybar 0.15
+    if subprocess.run(["pgrep", "-x", "waybar"], capture_output=True).returncode != 0:
+        return
+    subprocess.run(["pkill", "-x", "waybar"])
+    for _ in range(20):
+        if subprocess.run(["pgrep", "-x", "waybar"], capture_output=True).returncode != 0:
+            break
+        time.sleep(0.1)
+    subprocess.Popen(["waybar"], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+                     start_new_session=True)
+
+
+def main():
+    args = sys.argv[1:]
+    chosen = None
+    if args == ["--list"]:
+        cur = current_theme()
+        for slug, name in list_themes():
+            print(f"{'*' if name == cur else ' '} {slug:18} {name}")
+        return
+    if args == ["--menu"]:
+        chosen = menu()
+    elif args and args[0] == "--wallpaper":
+        generate_from_wallpaper(args[1] if len(args) > 1 else None)
+    elif args == ["--if-wallpaper"]:
+        # chamado pelo seletor de wallpaper: so regenera se o tema for o automatico
+        if current_theme() != WALL_NAME:
+            return
+        generate_from_wallpaper()
+    elif args:
+        select_theme(args[0])
+
+    c = load_palette()
+    h = {k: v.lstrip("#") for k, v in c.items()}  # sem o "#"
+
+    # Cores nomeadas GTK: usadas pelo Waybar (@import) e pelas janelas voidbr-*
+    write(f"{CONF}/voidbr/colors.css",
+          f"/* {HEADER} */\n" +
+          "".join(f"@define-color {k} {v};\n" for k, v in c.items()))
+
+    write(f"{CONF}/rofi/colors.rasi", f"""/* {HEADER} */
+* {{
+    bg: {c['bg']};
+    bg-alt: {c['bg3']};
+    border-col: {c['border']};
+    fg: {c['fg']};
+    fg-dim: {c['fg_dim']};
+    accent: {c['accent']};
+    accent-soft: {c['accent']}38;
+    bg-glass: {c['bg']}d9;
+    bg-alt-glass: {c['bg3']}b3;
+    accent-line: {c['accent']}73;
+    active: {c['green']};
+    urgent: {c['red']};
+}}
+""")
+
+    write(f"{CONF}/foot/colors.ini", f"""# {HEADER}
+[colors-dark]
+background={h['bg']}
+foreground={h['fg']}
+cursor={h['bg']} {h['fg']}
+regular0={h['black']}
+regular1={h['red']}
+regular2={h['green']}
+regular3={h['yellow']}
+regular4={h['blue']}
+regular5={h['magenta']}
+regular6={h['cyan']}
+regular7={h['fg_alt']}
+bright0={h['fg_dim']}
+bright1={h['red']}
+bright2={h['green']}
+bright3={h['yellow']}
+bright4={h['blue']}
+bright5={h['magenta']}
+bright6={h['cyan']}
+bright7={h['fg']}
+""")
+
+    write(f"{CONF}/hypr/colors.conf", f"# {HEADER}\n" +
+          "".join(f"${k} = rgb({v})\n" for k, v in h.items()) +
+          f"$bg_alpha = rgba({h['bg']}ee)\n")
+
+    # mako nao tem "include": o arquivo inteiro e gerado aqui
+    write(f"{CONF}/mako/config", f"""# {HEADER}
+font=Noto Sans 11
+background-color={c['bg']}d9
+text-color={c['fg']}
+border-color={c['accent']}80
+border-size=1
+border-radius=12
+padding=10
+margin=10
+default-timeout=6000
+anchor=top-right
+
+[urgency=critical]
+border-color={c['red']}
+default-timeout=0
+
+# Aviso de volume/brilho (voidbr-osd): no alto, rapido, fora do historico
+[app-name=voidbr-osd]
+anchor=top-center
+default-timeout=1500
+history=0
+border-color={c['accent']}80
+
+# Modo "nao perturbe" (alternado pelo botao do Waybar)
+[mode=do-not-disturb]
+invisible=1
+
+# ...mas o aviso de volume/brilho continua aparecendo
+[mode=do-not-disturb app-name=voidbr-osd]
+invisible=0
+""")
+
+    # Nomes do libadwaita: o GTK4 e o adw-gtk3 (GTK3) usam os mesmos
+    adw = f"""@define-color window_bg_color {c['bg']};
+@define-color window_fg_color {c['fg']};
+@define-color view_bg_color {c['bg2']};
+@define-color view_fg_color {c['fg']};
+@define-color headerbar_bg_color {c['bg2']};
+@define-color headerbar_fg_color {c['fg']};
+@define-color headerbar_border_color {c['bg3']};
+@define-color headerbar_backdrop_color {c['bg2']};
+@define-color card_bg_color {c['bg3']};
+@define-color card_fg_color {c['fg']};
+@define-color card_border_color {c['border']};
+@define-color popover_bg_color {c['bg']};
+@define-color popover_fg_color {c['fg']};
+@define-color popover_border_color {c['accent']};
+@define-color accent_color {c['accent']};
+@define-color accent_bg_color {c['accent']};
+@define-color accent_fg_color {c['bg']};
+"""
+
+    write(f"{CONF}/gtk-3.0/gtk.css", f"""/* {HEADER} */
+@define-color theme_bg_color {c['bg']};
+@define-color theme_fg_color {c['fg']};
+@define-color theme_base_color {c['bg2']};
+@define-color theme_text_color {c['fg']};
+@define-color theme_selected_bg_color {c['accent']};
+@define-color theme_selected_fg_color {c['bg']};
+@define-color insensitive_bg_color {c['bg_hl']};
+@define-color insensitive_fg_color {c['fg_dim']};
+@define-color insensitive_base_color {c['bg2']};
+@define-color theme_unfocused_bg_color {c['bg']};
+@define-color theme_unfocused_fg_color {c['fg_alt']};
+@define-color theme_unfocused_base_color {c['bg2']};
+@define-color theme_unfocused_text_color {c['fg_alt']};
+@define-color theme_unfocused_selected_bg_color {c['sel']};
+@define-color theme_unfocused_selected_fg_color {c['fg']};
+@define-color borders {c['bg3']};
+@define-color unfocused_borders {c['bg_hl']};
+{adw}""")
+
+    write(f"{CONF}/gtk-4.0/gtk.css", f"""/* {HEADER} */
+{adw}""")
+
+    # Bordas e fundo do Mango (formato 0xRRGGBBAA)
+    m = {k: f"0x{v}ff" for k, v in h.items()}
+    write(f"{CONF}/mango/colors.conf", f"""# {HEADER}
+rootcolor={m['bg2']}
+bordercolor=0x{h['border']}40
+focuscolor=0x{h['accent']}80
+maximizescreencolor={m['green']}
+urgentcolor={m['red']}
+scratchpadcolor={m['blue']}
+globalcolor={m['magenta']}
+overlaycolor=0x{h['accent']}80
+dropcolor=0x{h['green']}55
+splitcolor={m['orange']}
+""")
+
+    # Recarrega o que roda agora (foot e apps GTK pegam na proxima janela)
+    restart_waybar()
+    subprocess.run(["mmsg", "dispatch", "reload_config"], stdout=subprocess.DEVNULL,
+                   stderr=subprocess.DEVNULL)
+    subprocess.run(["makoctl", "reload"], stderr=subprocess.DEVNULL)
+    print(f"Tema aplicado: {current_theme()}. Terminais e apps GTK novos ja abrem com as cores novas.")
+    if chosen:
+        subprocess.run(["notify-send", "Tema aplicado", f"{chosen}\nTerminais e janelas novas já abrem com as cores novas."],
+                       stderr=subprocess.DEVNULL)
+
+
+if __name__ == "__main__":
+    main()

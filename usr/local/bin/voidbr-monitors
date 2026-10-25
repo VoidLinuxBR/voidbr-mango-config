@@ -1,0 +1,12 @@
+#!/usr/bin/env bash
+# ====================================================================
+# VoidBR Mango - Liga/desliga a energia de todos os monitores
+# Uso: voidbr-monitors off|on   (usado pelo hypridle)
+# ====================================================================
+case "$1" in
+    off) fn=sleep_monitor ;;
+    *)   fn=wakeup_monitor ;;
+esac
+mmsg get all-monitors | grep -o '"name":"[^"]*"' | cut -d'"' -f4 | while read -r mon; do
+    mmsg dispatch "$fn,$mon" >/dev/null
+done

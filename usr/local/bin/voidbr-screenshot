@@ -1,0 +1,40 @@
+#!/usr/bin/env bash
+# ====================================================================
+# VoidBR Mango - Captura de tela unificada (barra, menu e atalhos)
+# Uso: voidbr-screenshot area|tela|janela
+#   area:   seleciona com slurp e abre no satty/swappy (ou so copia)
+#   tela:   monitor onde esta o mouse, salva e copia
+#   janela: janela em foco, salva e copia
+# ====================================================================
+DIR="$HOME/Imagens/Capturas"
+mkdir -p "$DIR"
+f="$DIR/$(date +%Y-%m-%d_%H%M%S)-${1:-tela}.png"
+
+saved() {
+    wl-copy < "$f"
+    notify-send -i "$f" "Captura de tela" "Salva em $f e copiada"
+}
+
+case "$1" in
+    area)
+        geom=$(slurp) || exit 0
+        grim -g "$geom" "$f" || exit 1
+        if command -v satty >/dev/null; then
+            satty --filename "$f" --output-filename "$f" --copy-command wl-copy --early-exit
+        elif command -v swappy >/dev/null; then
+            swappy -f "$f"
+        else
+            wl-copy < "$f"
+        fi
+        ;;
+    janela)
+        geom=$(voidbr-record --geometry janela) || exit 1
+        grim -g "$geom" "$f" || exit 1
+        saved
+        ;;
+    *)
+        mon=$(voidbr-record --geometry monitor)
+        grim ${mon:+-o "$mon"} "$f" || exit 1
+        saved
+        ;;
+esac

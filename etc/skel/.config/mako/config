@@ -1,8 +1,30 @@
-font=Fira Sans 10
-background-color=#1e1e2e
-text-color=#cdd6f4
-border-color=#89b4fa
-border-size=2
-border-radius=6
+# GERADO POR voidbr-theme - edite ~/.config/voidbr/colors.ini
+font=Noto Sans 11
+background-color=#131318d9
+text-color=#e4e1e9
+border-color=#f9ba7280
+border-size=1
+border-radius=12
 padding=10
-default-timeout=5000
+margin=10
+default-timeout=6000
+anchor=top-right
+
+[urgency=critical]
+border-color=#ffb2bc
+default-timeout=0
+
+# Aviso de volume/brilho (voidbr-osd): no alto, rapido, fora do historico
+[app-name=voidbr-osd]
+anchor=top-center
+default-timeout=1500
+history=0
+border-color=#f9ba7280
+
+# Modo "nao perturbe" (alternado pelo botao do Waybar)
+[mode=do-not-disturb]
+invisible=1
+
+# ...mas o aviso de volume/brilho continua aparecendo
+[mode=do-not-disturb app-name=voidbr-osd]
+invisible=0

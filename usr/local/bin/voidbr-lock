@@ -1,0 +1,12 @@
+#!/usr/bin/env bash
+# ====================================================================
+# VoidBR Mango - Bloqueio de tela (hyprlock, ou swaylock como reserva)
+# ====================================================================
+pidof hyprlock swaylock >/dev/null && exit 0
+if command -v hyprlock >/dev/null; then
+    exec hyprlock
+elif command -v swaylock >/dev/null; then
+    exec swaylock -f -c 1a1b26
+else
+    notify-send "Bloqueio de tela" "Instale o hyprlock: sudo xbps-install hyprlock"
+fi

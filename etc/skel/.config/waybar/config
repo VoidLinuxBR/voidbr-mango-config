@@ -1,113 +1,274 @@
 {
   "layer": "top",
-  "height": 30,
-  "width": "auto",
-  "margin": 4,
-  "modules-left": ["custom/about", "ext/workspaces"],
-  "modules-center": ["dwl/window"],
-  "modules-right": [
+  "position": "top",
+  "height": 38,
+  "margin": "4 8 0 8",
+  "spacing": 4,
+  "modules-left": [
     "custom/menu",
-    "custom/help",
-    "pulseaudio",
-    "cpu",
-    "memory",
-    "battery",
-    "clock",
-    "network",
-    "custom/power",
-    "tray"
+    "custom/about",
+    "group/tags",
+    "custom/layout",
+    "custom/window"
   ],
-  "ext/workspaces": {
-    "format": "{icon}",
-    "ignore-hidden": true,
-    "sort-by-id": true,
-    "on-click": "activate",
-    "on-click-right": "deactivate",
-    "on-scroll-up": "~/.config/mango/scripts/mango-workspace-scroll.sh next",
-    "on-scroll-down": "~/.config/mango/scripts/mango-workspace-scroll.sh prev",
-    "format-icons": {
-      "active": "",
-      "default": ""
-    }
-  },
-  "dwl/window": {
-    "format": "[{layout}] {title}",
-    "max-length": 50
-  },
+  "modules-center": [
+    "clock"
+  ],
+  "modules-right": [
+    "custom/recording",
+    "mpris",
+    "privacy",
+    "group/tools",
+    "wireplumber",
+    "group/system",
+    "upower",
+    "group/indicators",
+    "custom/notification",
+    "tray",
+    "custom/power"
+  ],
   "custom/menu": {
-    "format": " 󰣇 ",
+    "format": "  ",
     "tooltip": true,
-    "tooltip-format": "Aplicativos",
-    "on-click": "nwggrid"
+    "tooltip-format": "Void Linux - Menu de Aplicativos (Super + Espaço)",
+    "on-click": "pkill -x rofi || voidbr-rofi -show drun"
   },
-  "custom/help": {
-    "format": " 󰘥 ",
-    "tooltip": true,
-    "tooltip-format": "VoidBR Mango Shortcuts\nClique ou pressione Super+F1",
-    "on-click": "voidbr-mango-shortcuts"
-  },
-  "custom/wallpaper": {
-    "format": " ",
-    "on-click": "/usr/local/bin/voidbr-change-wallpaper"
-  },
+  // Tags em uso + a atual, seguidas da proxima tag livre ("uma a mais")
+  // Do Waybar original do voidbr-mango-config (pedido do Vilmar)
   "custom/about": {
     "format": " VoidBR",
     "tooltip": true,
     "tooltip-format": "Sobre o VoidBR e o sistema",
-    "on-click": "bash -c \"fastfetch --logo none | yad --text-info --title='Sobre o VoidBR' --width=460 --height=460 --fontname='monospace 10' --button=Fechar:0\""
+    "on-click": "voidbr-about"
   },
-  "network": {
-    "format-wifi": " {essid}",
-    "format-ethernet": "󰈀 Ethernet",
-    "format-disconnected": "󰖪 Offline",
-    "on-click": "nm-connection-editor"
+  "group/tags": {
+    "orientation": "inherit",
+    "modules": ["ext/workspaces", "custom/nexttag"]
   },
-  "battery": {
-    "format": "{icon} {capacity}%",
-    "format-charging": "󰂄 {capacity}%",
-    "format-plugged": " {capacity}%",
-    "states": {
-      "warning": 30,
-      "critical": 15
+  // Tags do Mango via protocolo ext-workspace.
+  // O Mango marca como "hidden" as tags vazias e inativas: ignore-hidden
+  // esconde essas. Classes: .active = tag atual | (sem classe) = em uso
+  "ext/workspaces": {
+    "format": "{name}",
+    "ignore-hidden": true,
+    "sort-by-id": true,
+    "on-click": "activate",
+    "on-scroll-up": "mmsg dispatch viewtoright,0",
+    "on-scroll-down": "mmsg dispatch viewtoleft,0"
+  },
+  "custom/nexttag": {
+    "exec": "/usr/local/bin/voidbr-mango-nexttag",
+    "return-type": "json",
+    "format": "{}",
+    "tooltip": true,
+    "on-click": "/usr/local/bin/voidbr-mango-nexttag --go"
+  },
+  "custom/layout": {
+    "exec": "/usr/local/bin/voidbr-mango-layout-status",
+    "return-type": "json",
+    "format": "{}",
+    "tooltip": true,
+    "on-click": "mmsg dispatch switch_layout",
+    "on-click-right": "/usr/local/bin/voidbr-mango-layout-picker",
+    "on-scroll-up": "mmsg dispatch switch_layout",
+    "on-scroll-down": "mmsg dispatch switch_layout"
+  },
+  "custom/window": {
+    "exec": "/usr/local/bin/voidbr-mango-window-title",
+    "return-type": "json",
+    "format": "{}",
+    "tooltip": true,
+    "max-length": 50,
+    "on-click": "/usr/local/bin/voidbr-mango-layout-picker"
+  },
+  // Gravacao em andamento: aparece so enquanto grava; clique para parar
+  "custom/recording": {
+    "exec": "/usr/local/bin/voidbr-record status",
+    "return-type": "json",
+    "interval": 1,
+    "signal": 10,
+    "format": "{}",
+    "tooltip": true,
+    "on-click": "/usr/local/bin/voidbr-record parar"
+  },
+  // Player de midia (Spotify, Firefox, mpv...) - some sozinho sem player
+  "mpris": {
+    "format": "{player_icon} {title}",
+    "format-paused": "{status_icon} {title}",
+    "max-length": 30,
+    "player-icons": {
+      "default": "󰎆",
+      "firefox": "󰈹",
+      "spotify": "󰓇",
+      "mpv": "󰐹"
     },
-    "format-icons": ["󰂎", "󰁺", "󰁻", "󰁼", "󰁽", "󰁾", "󰁿", "󰂀", "󰂁", "󰂂", "󰁹"]
+    "status-icons": {
+      "paused": "󰏤"
+    },
+    "tooltip-format": "{artist} - {title}\nClique: tocar/pausar | Scroll: faixa",
+    "on-scroll-up": "playerctl next",
+    "on-scroll-down": "playerctl previous"
   },
-  "tray": {
-    "spacing": 10
+  // Aviso de microfone em uso / compartilhamento de tela (PipeWire)
+  "privacy": {
+    "icon-size": 14,
+    "icon-spacing": 4,
+    "modules": [
+      { "type": "screenshare", "tooltip": true },
+      { "type": "audio-in", "tooltip": true }
+    ]
   },
-  "clock": {
-    "timezone": "America/Sao_Paulo",
-    "tooltip-format": "<big>{:%Y %B}</big>\n<tt><big>{calendar}</big></tt>",
-    "format-alt": "{:%a %d-%m-%Y}"
+  // Gaveta de ferramentas: clique na engrenagem para revelar
+  "group/tools": {
+    "orientation": "inherit",
+    "drawer": {
+      "transition-duration": 300,
+      "children-class": "tools-child",
+      "transition-left-to-right": false,
+      "click-to-reveal": true
+    },
+    "modules": [
+      "custom/tools",
+      "custom/screenshot",
+      "custom/wallpaper",
+      "custom/theme",
+      "custom/display",
+      "custom/help"
+    ]
+  },
+  "custom/tools": {
+    "format": " 󰒓 ",
+    "tooltip": true,
+    "tooltip-format": "Ferramentas (clique para abrir)"
+  },
+  "custom/screenshot": {
+    "format": " 󰄄 ",
+    "tooltip": true,
+    "tooltip-format": "Captura e gravação (Super+Shift+R)\nClique: menu (área, tela, janela, gravar)\nClique-direito: tela inteira (Print)",
+    "on-click": "pkill -x rofi || /usr/local/bin/voidbr-capture-menu",
+    "on-click-right": "/usr/local/bin/voidbr-screenshot tela"
+  },
+  "custom/wallpaper": {
+    "format": " 󰸉 ",
+    "tooltip": true,
+    "tooltip-format": "Galeria de Papéis de Parede (Super+W)",
+    "on-click": "/usr/local/bin/voidbr-wallpaper-picker"
+  },
+  "custom/theme": {
+    "format": " 󰔎 ",
+    "tooltip": true,
+    "tooltip-format": "Temas\nClique: trocar tema de cores (VoidBR)\nClique-direito: temas GTK e ícones (nwg-look)",
+    "on-click": "pkill -x rofi || /usr/local/bin/voidbr-theme --menu",
+    "on-click-right": "nwg-look"
+  },
+  "custom/display": {
+    "format": " 󰍹 ",
+    "tooltip": true,
+    "tooltip-format": "Monitores: resolução, Hz e escala",
+    "on-click": "/usr/local/bin/voidbr-display"
+  },
+  "custom/help": {
+    "format": " 󰘥 ",
+    "tooltip": true,
+    "tooltip-format": "Atalhos do VoidBR Mango (Super+F1)",
+    "on-click": "/usr/local/bin/voidbr-mango-shortcuts"
+  },
+  // Volume nativo do PipeWire (substitui o modulo pulseaudio)
+  "wireplumber": {
+    "format": "{icon} {volume}%",
+    "format-muted": "󰝟 {volume}%",
+    "format-icons": ["󰕿", "󰖀", "󰕾"],
+    "tooltip-format": "{node_name}\nClique: controle de volume | Meio: mudo | Direito: mixer\nScroll: volume",
+    "on-click": "pkill -f '^python3 .*/voidbr-volume$' || /usr/local/bin/voidbr-volume",
+    "on-click-middle": "wpctl set-mute @DEFAULT_AUDIO_SINK@ toggle",
+    "on-click-right": "pavucontrol",
+    "scroll-step": 5
+  },
+  "group/indicators": {
+    "orientation": "inherit",
+    "modules": ["backlight", "custom/nightlight", "idle_inhibitor"]
+  },
+  "backlight": {
+    "format": "{icon} {percent}%",
+    "format-icons": ["󰃞", "󰃟", "󰃠"],
+    "tooltip-format": "Brilho da tela\nScroll: ajustar",
+    "on-scroll-up": "voidbr-osd brilho +",
+    "on-scroll-down": "voidbr-osd brilho -"
+  },
+  "group/system": {
+    "orientation": "inherit",
+    "modules": ["power-profiles-daemon", "cpu", "memory"]
+  },
+  "power-profiles-daemon": {
+    "format": "{icon}",
+    "tooltip-format": "Perfil de energia: {profile}\nClique para alternar (eco / equilibrado / desempenho)",
+    "tooltip": true,
+    "format-icons": {
+      "default": "󰾅",
+      "performance": "󰓅",
+      "balanced": "󰾅",
+      "power-saver": "󰌪"
+    }
+  },
+  "upower": {
+    "icon-size": 14,
+    "format": "{percentage}",
+    "format-alt": "{percentage} {time}",
+    "hide-if-empty": true,
+    "tooltip": true,
+    "tooltip-spacing": 20
   },
   "cpu": {
-    "format": "{usage}% ",
-    "on-click": "gnome-system-monitor"
+    "format": "󰻠 {usage}%",
+    "interval": 3,
+    "tooltip": true,
+    "on-click": "voidbr-btop"
   },
   "memory": {
-    "format": "󰍛 {}% ",
-    "on-click": "foot -e htop"
+    "format": "󰍛 {}%",
+    "interval": 5,
+    "tooltip-format": "{used:0.1f} / {total:0.1f} GiB",
+    "on-click": "voidbr-btop"
   },
-  "pulseaudio": {
-    "format": "{volume}% {icon}    {format_source}",
-    "format-bluetooth": "{volume}% {icon} {format_source}",
-    "format-bluetooth-muted": " {icon} {format_source}",
-    "format-muted": " {format_source}",
-    "format-source": "{volume}% ",
-    "format-source-muted": "",
+  // Luz noturna (wlsunset)
+  "custom/nightlight": {
+    "exec": "/usr/local/bin/voidbr-nightlight",
+    "return-type": "json",
+    "interval": 30,
+    "signal": 9,
+    "on-click": "/usr/local/bin/voidbr-nightlight toggle"
+  },
+  // "Cafe": impede o hypridle de apagar/bloquear a tela
+  "idle_inhibitor": {
+    "format": "{icon}",
     "format-icons": {
-      "headphone": "",
-      "hands-free": "",
-      "headset": "",
-      "phone": "",
-      "portable": "",
-      "car": "",
-      "default": ["", "", ""]
+      "activated": "󰅶",
+      "deactivated": "󰅶"
     },
-    "on-click": "pavucontrol"
+    "tooltip-format-activated": "Manter acordado: ATIVADO",
+    "tooltip-format-deactivated": "Manter acordado: desligado"
+  },
+  "custom/notification": {
+    "exec": "/usr/local/bin/voidbr-notify-status",
+    "return-type": "json",
+    "interval": "once",
+    "signal": 8,
+    "on-click": "makoctl mode -t do-not-disturb; pkill -RTMIN+8 waybar",
+    "on-click-right": "makoctl dismiss --all"
+  },
+  "clock": {
+    "format": " {:%H:%M   %d/%m/%Y}",
+    "tooltip-format": "<big>{:%Y %B}</big>\n<tt><small>{calendar}</small></tt>",
+    "on-click": "pkill -f '^python3 .*/voidbr-calendar$' || /usr/local/bin/voidbr-calendar"
+  },
+  "tray": {
+    "icon-size": 16,
+    "spacing": 8
   },
   "custom/power": {
-    "format": "⏻",
-    "on-click": "nwg-bar"
+    "format": " 󰐥 ",
+    "tooltip": true,
+    "tooltip-format": "Sair / Suspender / Reiniciar / Desligar",
+    "on-click": "pkill -x rofi || /usr/local/bin/voidbr-power-menu"
   }
 }

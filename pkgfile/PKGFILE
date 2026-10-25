@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
 # Maintainer: Vilmar Catafesta <vcatafesta@gmail.com>
+# Contributor: Wilton (Wiljapa) <wilton.kikkawa@gmail.com>
 
 pkgname=voidbr-mango-config
 pkgdesc="Skel config for VoidBR MANGO Meta Package"
@@ -14,7 +15,9 @@ url="https://github.com/voidlinuxbr/${pkgname}"
 source=("git+${url}.git")
 md5sums=('SKIP')
 makedepends=()
-depends=()
+depends=(
+	voidbr-sddm-themes # o tema voidbr-mango reaproveita o código do tema voidbr
+)
 backup=(
 	/etc/sddm.conf.d/wayland.conf
 )
@@ -63,6 +66,13 @@ post_install() {
 #CompositorCommand=weston --shell=kiosk
 DisplayServer=wayland
 EOF
+
+	# Tema do SDDM da edição Mango (fundo e cores do Mango sobre o tema voidbr).
+	# O /etc/sddm.conf é lido por último e tem prioridade sobre o sddm.conf.d.
+	if [ -f /etc/sddm.conf ] && grep -q '^Current=' /etc/sddm.conf; then
+		sed -i 's/^Current=.*/Current=voidbr-mango/' /etc/sddm.conf
+	fi
+	printf '[Theme]\nCurrent=voidbr-mango\n' >/etc/sddm.conf.d/10-voidbr-mango.conf
 }
 
 pre_upgrade() {

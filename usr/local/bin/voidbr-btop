@@ -1,0 +1,14 @@
+#!/bin/sh
+# ====================================================================
+# VoidBR Mango - Monitor do sistema (btop) dos botoes CPU/memoria
+# Uma instancia so: clicar de novo fecha. Abre flutuante e fecha ao
+# clicar fora (voidbr-click-outside), como os outros popups da barra.
+# ====================================================================
+APPID=io.voidbr.mango.btop
+
+pkill -f "^foot --app-id=$APPID " && exit 0
+
+foot --app-id="$APPID" -e btop &
+pid=$!
+voidbr-click-outside "$pid" >/dev/null 2>&1 &
+wait "$pid"

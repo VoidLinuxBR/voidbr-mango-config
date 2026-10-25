@@ -1,0 +1,104 @@
+#!/usr/bin/env python3
+# ====================================================================
+# VoidBR Mango - Calendario Grafico em GTK4
+# Janela visual moderna e escura exibindo o calendario ao clicar no relogio
+# ====================================================================
+import os
+import subprocess
+import sys
+import gi
+
+gi.require_version("Gtk", "4.0")
+from gi.repository import Gtk, Gdk
+
+# Paleta central (~/.config/voidbr/colors.ini, gerada por voidbr-theme)
+PALETTE_CSS = os.path.expanduser("~/.config/voidbr/colors.css")
+
+
+def themed(css):
+    try:
+        with open(PALETTE_CSS, "rb") as f:
+            return f.read() + css
+    except OSError:
+        return css
+
+CSS = b"""
+window {
+    background-color: alpha(@bg, 0.86);
+    border: none;
+    border-radius: 16px;
+    padding: 12px;
+}
+calendar {
+    background-color: transparent;
+    color: @fg;
+    border-radius: 12px;
+    padding: 8px;
+    font-size: 14px;
+}
+calendar:selected {
+    background-color: @accent;
+    color: @bg;
+    border-radius: 8px;
+    font-weight: bold;
+}
+calendar header {
+    color: @accent;
+    font-weight: bold;
+    font-size: 15px;
+    margin-bottom: 8px;
+}
+calendar button {
+    background-color: transparent;
+    color: @accent;
+    border-radius: 6px;
+}
+calendar button:hover {
+    background-color: alpha(@accent, 0.25);
+}
+"""
+
+class CalendarWindow(Gtk.ApplicationWindow):
+    def __init__(self, app):
+        super().__init__(application=app, title="Calendário")
+        self.set_default_size(320, 280)
+        self.set_resizable(False)
+
+        provider = Gtk.CssProvider()
+        provider.load_from_data(themed(CSS))
+        Gtk.StyleContext.add_provider_for_display(
+            Gdk.Display.get_default(), provider,
+            Gtk.STYLE_PROVIDER_PRIORITY_APPLICATION)
+
+        cal = Gtk.Calendar()
+        cal.set_show_day_names(True)
+        cal.set_show_heading(True)
+        self.set_child(cal)
+
+        key_ctrl = Gtk.EventControllerKey()
+        key_ctrl.connect("key-pressed", self.on_key)
+        self.add_controller(key_ctrl)
+
+    def on_key(self, ctrl, keyval, keycode, state):
+        if keyval == Gdk.KEY_Escape:
+            self.close()
+            return True
+        return False
+
+class App(Gtk.Application):
+    def __init__(self):
+        super().__init__(application_id="io.voidbr.mango.calendar")
+
+    def do_activate(self):
+        # Abrir de novo (botao da barra ou atalho) com a janela aberta: fecha
+        if self.props.active_window:
+            self.quit()
+            return
+        win = CalendarWindow(self)
+        win.present()
+        # Clique fora da janela tambem fecha
+        subprocess.Popen(["voidbr-click-outside", str(os.getpid())])
+
+if __name__ == "__main__":
+    # Abrir/fechar e feito pelo Waybar (pkill -f voidbr-calendar || voidbr-calendar)
+    App().run(sys.argv)

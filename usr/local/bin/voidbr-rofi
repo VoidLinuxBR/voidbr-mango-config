@@ -1,0 +1,16 @@
+#!/bin/sh
+# ====================================================================
+# VoidBR Mango - rofi que fecha ao clicar fora
+# Uso: igual ao rofi (voidbr-rofi -show drun, ... | voidbr-rofi -dmenu)
+#
+# No Wayland o rofi nao recebe cliques fora da janela dele (o
+# click-to-exit nao funciona): o voidbr-click-outside cobre a tela por
+# baixo e encerra o rofi. Saida e codigo de retorno sao os do rofi.
+# ====================================================================
+# Em segundo plano o sh troca o stdin por /dev/null: guarda antes no fd 3
+exec 3<&0
+rofi "$@" <&3 3<&- &
+exec 3<&-
+pid=$!
+voidbr-click-outside "$pid" >/dev/null 2>&1 &
+wait "$pid"

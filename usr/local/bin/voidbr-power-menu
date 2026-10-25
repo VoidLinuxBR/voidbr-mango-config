@@ -1,0 +1,19 @@
+#!/usr/bin/env bash
+# ====================================================================
+# VoidBR Mango - Menu de energia (rofi)
+# ====================================================================
+OPCOES="󰌾  Bloquear
+󰍃  Sair da sessão
+󰤄  Suspender
+󰜉  Reiniciar
+󰐥  Desligar"
+
+ESCOLHA=$(printf '%s\n' "$OPCOES" | voidbr-rofi -dmenu -i -p "Energia")
+
+case "$ESCOLHA" in
+    *Bloquear*)  /usr/local/bin/voidbr-lock ;;
+    *Sair*)      mmsg dispatch quit ;;
+    *Suspender*) loginctl suspend ;;
+    *Reiniciar*) loginctl reboot ;;
+    *Desligar*)  loginctl poweroff ;;
+esac

@@ -1,0 +1,84 @@
+#!/usr/bin/env python3
+# ====================================================================
+# VoidBR Mango - Layout atual para o Waybar (custom/layout)
+# Usa o monitor da propria barra ($WAYBAR_OUTPUT_NAME) e reconecta
+# automaticamente se o IPC cair (ex.: recarregar o Mango).
+# ====================================================================
+import json
+import os
+import signal
+import subprocess
+import sys
+import time
+
+sys.stdout.reconfigure(line_buffering=True)
+# Sai em silencio quando o Waybar fecha (sem "Broken pipe")
+signal.signal(signal.SIGPIPE, signal.SIG_DFL)
+
+LAYOUT_NAMES = {
+    "T": ("󰕰 Tile", "Lado a Lado / Master-Stack"),
+    "S": ("󰹑 Scroller", "Faixa Deslizante / PaperWM"),
+    "DW": ("󱒆 Dwindle", "Espiral Binária"),
+    "G": ("󰝘 Grid", "Grade Balanceada"),
+    "M": ("󰊓 Monocle", "Janela Única / Abas"),
+    "CT": ("󰕭 Center Tile", "Mestre Centralizado"),
+    "K": ("󰕮 Deck", "Pilha de Janelas"),
+    "VT": ("󰕱 V-Tile", "Divisão Vertical"),
+    "VK": ("󰕮 V-Deck", "Pilha Vertical"),
+    "VG": ("󰝘 V-Grid", "Grade Vertical"),
+    "VS": ("󰹑 V-Scroller", "Scroller Vertical"),
+    "RT": ("󰕰 R-Tile", "Mestre à Direita"),
+    "F": ("󰝘 Fair", "Distribuição Balanceada"),
+    "VF": ("󰝘 V-Fair", "Balanceada Vertical"),
+}
+
+OUTPUT = os.environ.get("WAYBAR_OUTPUT_NAME", "")
+last = None
+
+
+def print_layout(sym):
+    global last
+    sym = sym or "T"
+    if sym == last:
+        return
+    last = sym
+    name, desc = LAYOUT_NAMES.get(sym, (f"󰕰 {sym}", f"Layout {sym}"))
+    out = {
+        "text": name,
+        "tooltip": f"Layout: {desc}\nClique: Próximo layout\nClique-direito: Menu de layouts\nScroll: Alternar",
+        "class": sym.lower(),
+    }
+    try:
+        print(json.dumps(out))
+    except (BrokenPipeError, IOError):
+        sys.exit(0)
+
+
+def handle(data):
+    # "monitor <nome>" devolve o objeto direto; "all-monitors" devolve uma lista
+    if "monitors" in data:
+        mons = data["monitors"]
+        data = next((m for m in mons if m.get("active")), mons[0] if mons else {})
+    print_layout(data.get("layout_symbol", "T"))
+
+
+if not os.environ.get("MANGO_INSTANCE_SIGNATURE"):
+    print_layout("T")
+    sys.exit(0)
+
+target = ["monitor", OUTPUT] if OUTPUT else ["all-monitors"]
+
+while True:
+    try:
+        res = subprocess.run(["mmsg", "get", *target], capture_output=True, text=True, timeout=2)
+        handle(json.loads(res.stdout))
+        proc = subprocess.Popen(["mmsg", "watch", *target], stdout=subprocess.PIPE, text=True)
+        for line in proc.stdout:
+            try:
+                handle(json.loads(line))
+            except (ValueError, AttributeError):
+                pass
+        proc.wait()
+    except Exception:
+        pass
+    time.sleep(2)

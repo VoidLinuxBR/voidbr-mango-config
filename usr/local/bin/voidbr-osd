@@ -1,0 +1,52 @@
+#!/bin/sh
+# ====================================================================
+# VoidBR Mango - Volume e brilho pelas teclas, com aviso na tela
+# Uso: voidbr-osd volume +|-|mudo
+#      voidbr-osd brilho +|-
+# O aviso e uma notificacao do mako (app-name voidbr-osd) com barra de
+# progresso; a seguinte substitui a anterior em vez de empilhar.
+# ====================================================================
+SINK=@DEFAULT_AUDIO_SINK@
+STEP=5
+ID_FILE="${XDG_RUNTIME_DIR:-/tmp}/voidbr-osd.id"
+
+aviso() { # aviso <icone> <titulo> <porcentagem>
+    id=$(cat "$ID_FILE" 2>/dev/null)
+    notify-send -a voidbr-osd -i "$1" -h "int:value:$3" -t 1500 -p \
+        ${id:+-r "$id"} "$2" >"$ID_FILE" 2>/dev/null
+}
+
+case "$1" in
+volume)
+    case "$2" in
+    +) wpctl set-mute "$SINK" 0; wpctl set-volume -l 1.0 "$SINK" "$STEP%+" ;;
+    -) wpctl set-volume "$SINK" "$STEP%-" ;;
+    mudo) wpctl set-mute "$SINK" toggle ;;
+    *) exit 1 ;;
+    esac
+    info=$(wpctl get-volume "$SINK")   # "Volume: 0.45" ou "Volume: 0.45 [MUTED]"
+    pct=$(echo "$info" | awk '{ printf "%d", $2 * 100 + 0.5 }')
+    case "$info" in
+    *MUTED*) aviso audio-volume-muted "Mudo" "$pct" ;;
+    *)
+        if [ "$pct" -lt 34 ]; then icon=audio-volume-low
+        elif [ "$pct" -lt 67 ]; then icon=audio-volume-medium
+        else icon=audio-volume-high; fi
+        aviso "$icon" "Volume $pct%" "$pct"
+        ;;
+    esac
+    ;;
+brilho)
+    case "$2" in
+    +) brightnessctl -q set "+$STEP%" ;;
+    -) brightnessctl -q set "$STEP%-" ;;
+    *) exit 1 ;;
+    esac
+    pct=$(brightnessctl -m | cut -d, -f4 | tr -d %)
+    aviso display-brightness "Brilho $pct%" "$pct"
+    ;;
+*)
+    echo "uso: voidbr-osd volume +|-|mudo | brilho +|-" >&2
+    exit 1
+    ;;
+esac

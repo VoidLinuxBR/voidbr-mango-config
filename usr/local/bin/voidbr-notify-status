@@ -1,0 +1,10 @@
+#!/usr/bin/env bash
+# ====================================================================
+# VoidBR Mango - Estado do "Nao perturbe" do mako (custom/notification)
+# Atualizado via sinal SIGRTMIN+8 (pkill -RTMIN+8 waybar)
+# ====================================================================
+if makoctl mode 2>/dev/null | grep -qx do-not-disturb; then
+    echo '{"text": "󰂛", "tooltip": "Não perturbe: ATIVADO\nClique: desativar\nClique-direito: limpar notificações", "class": "dnd"}'
+else
+    echo '{"text": "󰂚", "tooltip": "Notificações ativas\nClique: não perturbe\nClique-direito: limpar notificações", "class": "on"}'
+fi

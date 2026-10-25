@@ -1,0 +1,16 @@
+# VoidBR - config do matugen usada por "voidbr-theme --wallpaper"
+# custom_colors: cores fixas convertidas para o esquema do wallpaper.
+# blend = true puxa o tom da cor para a cor principal da imagem.
+[config]
+
+[config.custom_colors]
+red = { color = "#f7768e", blend = false }
+green = { color = "#9ece6a", blend = true }
+yellow = { color = "#e0af68", blend = true }
+orange = { color = "#ff9e64", blend = true }
+blue = { color = "#7aa2f7", blend = true }
+cyan = { color = "#7dcfff", blend = true }
+teal = { color = "#73daca", blend = true }
+magenta = { color = "#bb9af7", blend = true }
+
+[templates]

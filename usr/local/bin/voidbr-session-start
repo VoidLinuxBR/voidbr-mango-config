@@ -1,0 +1,59 @@
+#!/usr/bin/env bash
+# ====================================================================
+# VoidBR Mango - Servicos da sessao Waybar
+# Usa o programa novo se estiver instalado, senao cai no antigo.
+# ====================================================================
+WALL="$HOME/.local/share/backgrounds/current.png"
+
+# Primeiro login: gera os arquivos de cor do tema (Waybar, rofi, foot, mako...)
+[ -f "$HOME/.config/voidbr/colors.css" ] || voidbr-theme >/dev/null 2>&1
+
+# Sem wallpaper escolhido ainda: usa o padrao do VoidBR
+if [ ! -e "$WALL" ]; then
+    for img in /usr/share/backgrounds/mango/voidbr_mango.webp /usr/share/backgrounds/voidbr/mango.png; do
+        if [ -f "$img" ]; then
+            mkdir -p "$(dirname "$WALL")"
+            ln -sf "$img" "$WALL"
+            break
+        fi
+    done
+fi
+
+# Chaveiro de senhas: o PAM do login (SDDM) ja o abriu com a senha do
+# usuario; aqui ele se liga a esta sessao D-Bus (dbus-run-session)
+command -v gnome-keyring-daemon >/dev/null &&
+    gnome-keyring-daemon --start --components=secrets >/dev/null 2>&1
+
+# Tema, cursor e fonte para apps X11 (~/.config/xsettingsd/xsettingsd.conf)
+command -v xsettingsd >/dev/null && xsettingsd >/dev/null 2>&1 &
+
+# Agente polkit (senha de administrador para apps graficos)
+if command -v lxqt-policykit-agent >/dev/null; then
+    lxqt-policykit-agent &
+elif [ -x /usr/libexec/xfce-polkit ]; then
+    /usr/libexec/xfce-polkit &
+fi
+
+# Papel de parede
+if command -v awww-daemon >/dev/null; then
+    awww-daemon &
+    for _ in $(seq 20); do awww query >/dev/null 2>&1 && break; sleep 0.2; done
+    awww img "$WALL" --transition-type none
+else
+    swaybg -i "$WALL" -m fill &
+fi
+
+# Inatividade (apaga a tela e bloqueia) - ~/.config/hypr/hypridle.conf
+command -v hypridle >/dev/null && hypridle &
+
+# Montagem automatica de pendrives com icone na bandeja
+command -v udiskie >/dev/null && udiskie --tray &
+
+# Bluetooth e rede na bandeja
+# (o blueman so sobe se houver adaptador Bluetooth: sem ele ocupa ~35 MB a toa)
+if command -v blueman-applet >/dev/null && ls /sys/class/bluetooth/hci* >/dev/null 2>&1; then
+    blueman-applet &
+fi
+command -v nm-applet >/dev/null && nm-applet &
+
+wait

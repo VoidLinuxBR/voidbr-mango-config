@@ -1,0 +1,222 @@
+#!/usr/bin/env python3
+# ====================================================================
+# VoidBR Mango - Seletor Grafico de Layouts em GTK4
+# Janela visual moderna com cards e icones para cada modo de tiling
+# ====================================================================
+import json
+import os
+import subprocess
+import sys
+import gi
+
+gi.require_version("Gtk", "4.0")
+from gi.repository import Gtk, Gdk, GLib
+
+LAYOUTS = [
+    ("tile", "󰕰 Tile", "Lado a Lado / Master-Stack", "1"),
+    ("scroller", "󰹑 Scroller", "Faixa Deslizante / PaperWM", "2"),
+    ("dwindle", "󱒆 Dwindle", "Espiral Binária Dinâmica", "3"),
+    ("grid", "󰝘 Grid", "Grade Balanceada Uniforme", "4"),
+    ("monocle", "󰊓 Monocle", "Janela Única / Foco Total", "5"),
+    ("center_tile", "󰕭 Center Tile", "Mestre Centralizado", "6"),
+    ("deck", "󰕮 Deck", "Pilha de Janelas em Cartas", "7"),
+    ("vertical_tile", "󰕱 V-Tile", "Divisão Vertical das Telas", "8"),
+]
+
+# Paleta central (~/.config/voidbr/colors.ini, gerada por voidbr-theme)
+PALETTE_CSS = os.path.expanduser("~/.config/voidbr/colors.css")
+
+
+def themed(css):
+    try:
+        with open(PALETTE_CSS, "rb") as f:
+            return f.read() + css
+    except OSError:
+        return css
+
+CSS = b"""
+window {
+    background-color: alpha(@bg, 0.86);
+    border: none;
+    border-radius: 16px;
+}
+.header-title {
+    font-size: 18px;
+    font-weight: bold;
+    color: @accent;
+    margin-bottom: 4px;
+}
+.header-sub {
+    font-size: 12px;
+    color: @fg_dim;
+    margin-bottom: 12px;
+}
+.card-btn {
+    background-color: alpha(@bg3, 0.8);
+    border: 1px solid @bg3;
+    border-radius: 12px;
+    padding: 12px 16px;
+    margin: 6px;
+    transition: all 200ms ease;
+}
+.card-btn:hover {
+    background-color: alpha(@accent, 0.25);
+    border-color: @accent;
+}
+.card-btn.active {
+    background-color: alpha(@accent, 0.4);
+    border-color: @accent;
+    box-shadow: 0 0 10px alpha(@accent, 0.5);
+}
+.layout-icon {
+    font-size: 26px;
+    color: @orange;
+    margin-bottom: 4px;
+}
+.layout-title {
+    font-size: 15px;
+    font-weight: bold;
+    color: @fg;
+}
+.layout-desc {
+    font-size: 11px;
+    color: @accent;
+}
+.layout-num {
+    font-size: 10px;
+    color: @yellow;
+    background: rgba(0, 0, 0, 0.4);
+    padding: 2px 6px;
+    border-radius: 8px;
+}
+"""
+
+def get_current_layout():
+    try:
+        res = subprocess.run(["mmsg", "get", "all-monitors"], capture_output=True, text=True, timeout=1)
+        data = json.loads(res.stdout)
+        mons = data.get("monitors", [])
+        mon = next((m for m in mons if m.get("active")), mons[0] if mons else {})
+        return mon.get("layout_symbol", "")
+    except Exception:
+        return ""
+
+class LayoutPicker(Gtk.ApplicationWindow):
+    def __init__(self, app):
+        super().__init__(application=app, title="Seletor de Layouts")
+        self.set_default_size(580, 420)
+        self.set_resizable(False)
+
+        provider = Gtk.CssProvider()
+        provider.load_from_data(themed(CSS))
+        Gtk.StyleContext.add_provider_for_display(Gdk.Display.get_default(), provider, Gtk.STYLE_PROVIDER_PRIORITY_APPLICATION)
+
+        main_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=8)
+        main_box.set_margin_top(20)
+        main_box.set_margin_bottom(20)
+        main_box.set_margin_start(20)
+        main_box.set_margin_end(20)
+        self.set_child(main_box)
+
+        # Header
+        lbl_title = Gtk.Label(label="󰕰  Seletor de Modo de Tiling")
+        lbl_title.add_css_class("header-title")
+        main_box.append(lbl_title)
+
+        lbl_sub = Gtk.Label(label="Escolha a organização das janelas no MangoWM (ou pressione 1-8 / Esc)")
+        lbl_sub.add_css_class("header-sub")
+        main_box.append(lbl_sub)
+
+        # Grid de cards 4x2
+        grid = Gtk.Grid()
+        grid.set_column_spacing(10)
+        grid.set_row_spacing(10)
+        grid.set_column_homogeneous(True)
+        grid.set_row_homogeneous(True)
+        main_box.append(grid)
+
+        current_sym = get_current_layout().lower()
+
+        for idx, (lid, title, desc, num) in enumerate(LAYOUTS):
+            col = idx % 2
+            row = idx // 2
+
+            btn = Gtk.Button()
+            btn.add_css_class("card-btn")
+            if lid == current_sym or (lid == "tile" and current_sym == "t") or (lid == "scroller" and current_sym == "s") or (lid == "dwindle" and current_sym == "dw") or (lid == "grid" and current_sym == "g") or (lid == "monocle" and current_sym == "m") or (lid == "center_tile" and current_sym == "ct") or (lid == "deck" and current_sym == "k") or (lid == "vertical_tile" and current_sym == "vt"):
+                btn.add_css_class("active")
+
+            btn_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=4)
+
+            # Top row: Icon + Num
+            top_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL)
+            lbl_icon = Gtk.Label(label=title.split()[0])
+            lbl_icon.add_css_class("layout-icon")
+            lbl_icon.set_hexpand(True)
+            lbl_icon.set_halign(Gtk.Align.START)
+            top_box.append(lbl_icon)
+
+            lbl_num = Gtk.Label(label=f"[{num}]")
+            lbl_num.add_css_class("layout-num")
+            lbl_num.set_halign(Gtk.Align.END)
+            top_box.append(lbl_num)
+            btn_box.append(top_box)
+
+            # Titulo
+            lbl_t = Gtk.Label(label=" ".join(title.split()[1:]))
+            lbl_t.add_css_class("layout-title")
+            lbl_t.set_halign(Gtk.Align.START)
+            btn_box.append(lbl_t)
+
+            # Descricao
+            lbl_d = Gtk.Label(label=desc)
+            lbl_d.add_css_class("layout-desc")
+            lbl_d.set_halign(Gtk.Align.START)
+            btn_box.append(lbl_d)
+
+            btn.set_child(btn_box)
+            btn.connect("clicked", self.on_layout_selected, lid)
+            grid.attach(btn, col, row, 1, 1)
+
+        # Controlador de teclado (Esc para sair, 1-8 para selecao rapida)
+        key_controller = Gtk.EventControllerKey()
+        key_controller.connect("key-pressed", self.on_key_pressed)
+        self.add_controller(key_controller)
+
+    def on_layout_selected(self, btn, layout_id):
+        sock = os.environ.get("MANGO_INSTANCE_SIGNATURE")
+        cmd = ["mmsg", "dispatch", f"setlayout,{layout_id}"]
+        if sock:
+            subprocess.run(cmd, env=dict(os.environ, MANGO_INSTANCE_SIGNATURE=sock))
+        else:
+            subprocess.run(cmd)
+        self.close()
+
+    def on_key_pressed(self, controller, keyval, keycode, state):
+        if keyval == Gdk.KEY_Escape:
+            self.close()
+            return True
+        key_char = chr(keyval) if 32 <= keyval <= 126 else ""
+        for lid, title, desc, num in LAYOUTS:
+            if key_char == num:
+                self.on_layout_selected(None, lid)
+                return True
+        return False
+
+class App(Gtk.Application):
+    def __init__(self):
+        super().__init__(application_id="io.voidbr.mango.layoutpicker")
+
+    def do_activate(self):
+        # Abrir de novo (botao da barra ou atalho) com a janela aberta: fecha
+        if self.props.active_window:
+            self.quit()
+            return
+        win = LayoutPicker(self)
+        win.present()
+        # Clique fora da janela tambem fecha
+        subprocess.Popen(["voidbr-click-outside", str(os.getpid())])
+
+if __name__ == "__main__":
+    app = App()
+    app.run(sys.argv)

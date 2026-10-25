@@ -1,0 +1,121 @@
+configuration {
+    // Abas por categoria (freedesktop): app novo cai sozinho na aba certa
+    modi: "drun,Internet:voidbr-rofi-apps Network,Mídia:voidbr-rofi-apps AudioVideo Audio Video Graphics,Utilitários:voidbr-rofi-apps Utility Office,Sistema:voidbr-rofi-apps System,Ajustes:voidbr-rofi-apps Settings DesktopSettings,VoidBR:voidbr-rofi-apps X-VoidBR-Apps";
+    // Tab / Shift+Tab trocam de aba (setas continuam andando na lista)
+    kb-element-next: "";
+    kb-element-prev: "";
+    kb-mode-next: "Tab,Control+Tab";
+    kb-mode-previous: "ISO_Left_Tab,Control+ISO_Left_Tab";
+    font: "Noto Sans 11";
+    show-icons: true;
+    icon-theme: "Papirus-Dark";
+    display-drun: "Todos";
+    display-run: "  ";
+    display-window: "  ";
+    drun-display-format: "{name}";
+    me-select-entry: "";
+    me-accept-entry: "MousePrimary";
+    click-to-exit: true;
+}
+
+@theme "/dev/null"
+
+@import "colors.rasi"
+
+* {
+    background-color: transparent;
+    text-color: @fg;
+    margin: 0;
+    padding: 0;
+}
+
+window {
+    background-color: @bg-glass;
+    border: 1px;
+    border-color: @accent-line;
+    border-radius: 18px;
+    width: 760px;
+    padding: 16px;
+}
+
+mainbox {
+    children: [ mode-switcher, inputbar, message, listview ];
+}
+
+mode-switcher {
+    spacing: 6px;
+    margin: 0 0 12px 0;
+}
+
+button {
+    padding: 6px 10px;
+    border-radius: 10px;
+    text-color: @fg-dim;
+    cursor: pointer;
+}
+
+button selected {
+    background-color: @accent-soft;
+    border: 1px;
+    border-color: @accent-line;
+    text-color: @fg;
+}
+
+inputbar {
+    background-color: @bg-alt-glass;
+    border: 1px;
+    border-color: @border-col;
+    border-radius: 12px;
+    padding: 10px 14px;
+    margin: 0 0 14px 0;
+    children: [ prompt, entry ];
+    spacing: 10px;
+}
+
+prompt {
+    text-color: @accent;
+    font-size: 15px;
+    vertical-align: 0.5;
+}
+
+entry {
+    placeholder: "Pesquisar aplicativos...";
+    placeholder-color: @fg-dim;
+    text-color: @fg;
+    vertical-align: 0.5;
+}
+
+listview {
+    lines: 7;
+    columns: 1;
+    scrollbar: false;
+    spacing: 6px;
+}
+
+element {
+    padding: 8px 12px;
+    border-radius: 10px;
+    spacing: 14px;
+    background-color: transparent;
+    cursor: pointer;
+}
+
+element selected {
+    background-color: @accent-soft;
+    border: 1px;
+    border-color: @accent-line;
+    text-color: @fg;
+}
+
+element-icon {
+    size: 32px;
+    background-color: transparent;
+    vertical-align: 0.5;
+}
+
+element-text {
+    vertical-align: 0.5;
+    text-color: inherit;
+    font-size: 13px;
+    font-weight: 500;
+}

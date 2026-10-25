@@ -1,0 +1,86 @@
+#!/usr/bin/env python3
+# ====================================================================
+# VoidBR Mango - "Uma tag a mais" para o Waybar (custom/nexttag)
+# O ext/workspaces mostra so as tags em uso + a atual (ignore-hidden);
+# este modulo mostra a proxima tag livre depois da ultima usada.
+# Uso: voidbr-mango-nexttag        -> fluxo JSON para o Waybar
+#      voidbr-mango-nexttag --go   -> vai para essa tag (clique)
+# ====================================================================
+import json
+import os
+import signal
+import subprocess
+import sys
+import time
+
+sys.stdout.reconfigure(line_buffering=True)
+# Sai em silencio quando o Waybar fecha (sem "Broken pipe")
+signal.signal(signal.SIGPIPE, signal.SIG_DFL)
+
+OUTPUT = os.environ.get("WAYBAR_OUTPUT_NAME", "")
+last = None
+
+
+def pick_monitor(data):
+    # "monitor <nome>" devolve o objeto direto; "all-monitors" devolve uma lista
+    if "monitors" in data:
+        mons = data["monitors"]
+        return next((m for m in mons if m.get("active")), mons[0] if mons else {})
+    return data
+
+
+def next_tag(mon):
+    tags = mon.get("tags", [])
+    # Ja numa tag vazia: outra tag livre nao serve para nada, e cada clique
+    # levaria para mais longe (as vazias somem da barra e nao da para voltar)
+    if any(t.get("is_active") and t.get("client_count", 0) == 0 for t in tags):
+        return None
+    used = [t["index"] for t in tags if t.get("client_count", 0) > 0]
+    nxt = (max(used) if used else 0) + 1
+    return nxt if nxt <= mon.get("tag_num", len(tags)) else None
+
+
+def emit(mon):
+    global last
+    nxt = next_tag(mon)
+    if nxt == last:
+        return
+    last = nxt
+    if nxt is None:
+        out = {"text": "", "tooltip": "", "class": "none"}
+    else:
+        out = {"text": str(nxt), "tooltip": f"Ir para a tag {nxt} (livre)", "class": "free"}
+    print(json.dumps(out))
+
+
+def go():
+    target = ["monitor", OUTPUT] if OUTPUT else ["all-monitors"]
+    res = subprocess.run(["mmsg", "get", *target], capture_output=True, text=True, timeout=2)
+    nxt = next_tag(pick_monitor(json.loads(res.stdout)))
+    if nxt:
+        subprocess.run(["mmsg", "dispatch", f"view,{nxt},0"], capture_output=True)
+
+
+if sys.argv[1:] == ["--go"]:
+    go()
+    sys.exit(0)
+
+if not os.environ.get("MANGO_INSTANCE_SIGNATURE"):
+    sys.exit(0)
+
+target = ["monitor", OUTPUT] if OUTPUT else ["all-monitors"]
+
+while True:
+    try:
+        res = subprocess.run(["mmsg", "get", *target], capture_output=True, text=True, timeout=2)
+        emit(pick_monitor(json.loads(res.stdout)))
+        proc = subprocess.Popen(["mmsg", "watch", *target], stdout=subprocess.PIPE, text=True)
+        for line in proc.stdout:
+            try:
+                emit(pick_monitor(json.loads(line)))
+            except (ValueError, AttributeError):
+                pass
+        proc.wait()
+    except Exception:
+        pass
+    time.sleep(2)

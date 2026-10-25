@@ -1,0 +1,25 @@
+#!/usr/bin/env bash
+# ====================================================================
+# VoidBR Mango - Luz noturna (wlsunset) para o Waybar
+# Uso: voidbr-nightlight          -> estado em JSON
+#      voidbr-nightlight toggle   -> liga/desliga
+# Horario fixo (06:30 - 18:30), sem depender de localizacao.
+# ====================================================================
+if [ "$1" = toggle ]; then
+    if pgrep -x wlsunset >/dev/null; then
+        pkill -x wlsunset
+    elif command -v wlsunset >/dev/null; then
+        setsid -f wlsunset -S 06:30 -s 18:30 -t 4000 -T 6500 >/dev/null 2>&1
+    else
+        notify-send "Luz noturna" "Instale o wlsunset: sudo xbps-install wlsunset"
+    fi
+    sleep 0.2
+    pkill -RTMIN+9 waybar
+    exit 0
+fi
+
+if pgrep -x wlsunset >/dev/null; then
+    echo '{"text": "󰖔", "tooltip": "Luz noturna: ATIVADA (18:30 - 06:30)\nClique: desligar", "class": "on"}'
+else
+    echo '{"text": "󰖨", "tooltip": "Luz noturna: desligada\nClique: ligar", "class": "off"}'
+fi

@@ -1,0 +1,51 @@
+#!/usr/bin/env python3
+# ====================================================================
+# VoidBR Mango - Titulo da janela focada para o Waybar (custom/window)
+# O corte do texto fica a cargo do "max-length" do Waybar.
+# Reconecta automaticamente se o IPC cair (ex.: recarregar o Mango).
+# ====================================================================
+import json
+import os
+import signal
+import subprocess
+import sys
+import time
+
+sys.stdout.reconfigure(line_buffering=True)
+# Sai em silencio quando o Waybar fecha (sem "Broken pipe")
+signal.signal(signal.SIGPIPE, signal.SIG_DFL)
+
+if not os.environ.get("MANGO_INSTANCE_SIGNATURE"):
+    sys.exit(0)
+
+
+def print_title(data):
+    if not isinstance(data, dict):
+        return
+    title = data.get("title", "")
+    appid = data.get("appid", "")
+    out = {
+        "text": title or appid,
+        "tooltip": f"Janela: {title}\nApp: {appid}" if title else "",
+        "class": "empty" if not (title or appid) else "",
+    }
+    try:
+        print(json.dumps(out))
+    except (BrokenPipeError, IOError):
+        sys.exit(0)
+
+
+while True:
+    try:
+        res = subprocess.run(["mmsg", "get", "focusing-client"], capture_output=True, text=True, timeout=2)
+        print_title(json.loads(res.stdout) if res.stdout.strip() else {})
+        proc = subprocess.Popen(["mmsg", "watch", "focusing-client"], stdout=subprocess.PIPE, text=True)
+        for line in proc.stdout:
+            try:
+                print_title(json.loads(line))
+            except ValueError:
+                pass
+        proc.wait()
+    except Exception:
+        pass
+    time.sleep(2)

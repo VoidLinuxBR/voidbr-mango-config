@@ -1,0 +1,31 @@
+#!/usr/bin/env bash
+# ====================================================================
+# VoidBR Mango - Menu de captura e gravacao (rofi)
+# Se houver gravacao em andamento, para direto (sem menu).
+# ====================================================================
+if voidbr-record status | grep -q '"recording"'; then
+    exec voidbr-record parar
+fi
+
+OPCOES="󰩭  Capturar área
+󰍹  Capturar tela inteira
+󰖯  Capturar janela
+󰑋  Gravar área
+󰑋  Gravar tela inteira
+󰑋  Gravar janela
+󰕾  Gravar área com som
+󰕾  Gravar tela inteira com som"
+
+ESCOLHA=$(printf '%s\n' "$OPCOES" | voidbr-rofi -dmenu -i -p "Captura" \
+    -theme-str 'entry { placeholder: "Pesquisar..."; } listview { lines: 8; }')
+
+case "$ESCOLHA" in
+    *"Capturar área"*)             voidbr-screenshot area ;;
+    *"Capturar tela inteira"*)     voidbr-screenshot tela ;;
+    *"Capturar janela"*)           voidbr-screenshot janela ;;
+    *"Gravar área com som"*)       voidbr-record area --som ;;
+    *"Gravar tela inteira com som"*) voidbr-record tela --som ;;
+    *"Gravar área"*)               voidbr-record area ;;
+    *"Gravar tela inteira"*)       voidbr-record tela ;;
+    *"Gravar janela"*)             voidbr-record janela ;;
+esac

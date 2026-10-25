@@ -1,0 +1,8 @@
+[Desktop Entry]
+Type=Application
+Name=Monitores
+Comment=Resolução, taxa de atualização e escala dos monitores (Mango)
+Exec=/usr/local/bin/voidbr-display
+Icon=preferences-desktop-display
+Categories=Settings;HardwareSettings;
+Keywords=monitor;tela;resolução;escala;hz;display;

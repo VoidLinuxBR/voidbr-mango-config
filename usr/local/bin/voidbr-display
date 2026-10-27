@@ -114,14 +114,16 @@ def read_conf():
 
 
 def parse_rules(text):
-    # "monitorrule=name:DP-1,width:2560,..." -> [{"name": "DP-1", "width": "2560", ...}]
+    # "monitor_rule=name:DP-1,width:2560,..." -> [{"name": "DP-1", "width": "2560", ...}]
+    # (no Mango 0.17 a chave e "monitorrule")
     rules = []
     for line in text.splitlines():
         line = line.strip()
-        if not line.startswith("monitorrule="):
+        prefix = next((p for p in ("monitor_rule=", "monitorrule=") if line.startswith(p)), None)
+        if not prefix:
             continue
         fields = {}
-        for part in line[len("monitorrule="):].split(","):
+        for part in line[len(prefix):].split(","):
             if ":" in part:
                 k, v = part.split(":", 1)
                 fields[k.strip()] = v.strip()
@@ -136,13 +138,15 @@ def rule_name(rule):
 def build_conf(rules):
     lines = [HEADER]
     for r in rules:
-        lines.append("monitorrule=" + ",".join(f"{k}:{v}" for k, v in r.items()) + "\n")
+        lines.append("monitor_rule=" + ",".join(f"{k}:{v}" for k, v in r.items()) + "\n")
     return "".join(lines)
 
 
 def apply_conf(text):
     with open(MONITORS_CONF, "w") as f:
         f.write(text)
+    # Nomes do Mango 0.18; o voidbr-compat troca para os antigos no 0.17
+    subprocess.run(["voidbr-compat", "auto", MONITORS_CONF], stderr=subprocess.DEVNULL)
     subprocess.run(["mmsg", "dispatch", "reload_config"], capture_output=True)
 
 

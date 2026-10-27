@@ -1,0 +1,105 @@
+#!/usr/bin/env python3
+# ====================================================================
+# VoidBR Mango - Chaves da config para a versao instalada do Mango
+# O Mango 0.18 usa nomes em snake_case (window_rule, is_floating,
+# exec_once, border_color...) e nao aceita os antigos; o 0.17 so
+# entende os antigos. A config do VoidBR usa os nomes novos.
+#
+# Uso: voidbr-compat auto ARQUIVO...     -> nomes da versao instalada
+#      voidbr-compat new|old ARQUIVO...  -> forca uma das formas
+#      voidbr-compat version             -> "new" ou "old"
+# A lista de nomes e a do script oficial de migracao do Mango 0.18.
+# ====================================================================
+import re
+import subprocess
+import sys
+
+# pares antigo=novo, aplicados em palavras inteiras
+RENAMES = [
+    ("windowrule-once", "window_rule_once"), ("windowrule", "window_rule"),
+    ("monitorrule", "monitor_rule"), ("tagrule", "tag_rule"), ("layerrule", "layer_rule"),
+    ("devicerule", "device_rule"), ("source-optional", "source_optional"),
+    ("exec-once", "exec_once"), ("keymode", "key_mode"),
+    ("isnoborder", "no_border"), ("isnoshadow", "no_shadow"), ("isnoradius", "no_radius"),
+    ("isnoanimation", "no_animation"), ("isnosizehint", "no_size_hint"), ("noblur", "no_blur"),
+    ("noshadow", "no_shadow"), ("noanim", "no_animation"), ("nofocus", "no_focus"),
+    ("nofadein", "no_fade_in"), ("nofadeout", "no_fade_out"), ("noswallow", "no_swallow"),
+    ("special_gappih", "special_gap_inner_horizontal"), ("special_gappiv", "special_gap_inner_vertical"),
+    ("special_gappoh", "special_gap_outer_horizontal"), ("special_gappov", "special_gap_outer_vertical"),
+    ("gappih", "gap_inner_horizontal"), ("gappiv", "gap_inner_vertical"),
+    ("gappoh", "gap_outer_horizontal"), ("gappov", "gap_outer_vertical"),
+    ("overviewgappi", "overview_gap_inner"), ("overviewgappo", "overview_gap_outer"),
+    ("default_mfact", "default_master_factor"), ("default_nmaster", "default_master_count"),
+    ("animation_curve_opafadein", "animation_curve_opacity_fade_in"),
+    ("animation_curve_opafadeout", "animation_curve_opacity_fade_out"),
+    ("dwindle_hsplit", "dwindle_horizontal_split"), ("dwindle_vsplit", "dwindle_vertical_split"),
+    ("fadein_begin_opacity", "fade_in_begin_opacity"), ("fadeout_begin_opacity", "fade_out_begin_opacity"),
+    ("focusdir_only_zone_overlap", "focus_direction_only_zone_overlap"),
+    ("force_fakemaximize", "force_fake_maximize"),
+    ("idleinhibit_ignore_visible", "idle_inhibit_ignore_visible"),
+    ("idleinhibit_when_focus", "idle_inhibit_when_focus"),
+    ("idleinhibit_when_fullscreen", "idle_inhibit_when_fullscreen"),
+    ("syncobj_enable", "sync_obj_enable"), ("isfakefullscreen", "is_fake_fullscreen"),
+    ("isfloating", "is_floating"), ("isfullscreen", "is_fullscreen"), ("isunglobal", "is_unmanaged_global"),
+    ("isglobal", "is_global"), ("isnamedscratchpad", "is_named_scratchpad"),
+    ("isopensilent", "is_open_silent"), ("isoverlay", "is_overlay"), ("istagsilent", "is_tag_silent"),
+    ("isterm", "is_term"), ("appid", "app_id"), ("bordercolor", "border_color"), ("borderpx", "border_px"),
+    ("dropcolor", "drop_color"), ("focuscolor", "focus_color"), ("globalcolor", "global_color"),
+    ("globalkeybinding", "global_key_binding"), ("maximizescreencolor", "maximized_screen_color"),
+    ("mfact", "master_factor"), ("nmaster", "master_count"), ("numlockon", "numlock_on"),
+    ("offsetx", "offset_x"), ("offsety", "offset_y"), ("overlaycolor", "overlay_color"),
+    ("rootcolor", "root_color"), ("scratchpadcolor", "scratchpad_color"), ("shadowscolor", "shadows_color"),
+    ("sloppyfocus", "sloppy_focus"), ("smartgaps", "smart_gaps"), ("splitcolor", "split_color"),
+    ("urgentcolor", "urgent_color"), ("warpcursor", "warp_cursor"),
+]
+# novo -> antigo: varios nomes antigos viraram o mesmo novo; fica o usado nas regras
+OLD_FOR = {}
+for old, new in RENAMES:
+    OLD_FOR.setdefault(new, old)
+OLD_FOR.update({"no_shadow": "noshadow", "no_animation": "noanim"})
+
+WORD = r"(?<![A-Za-z0-9_-]){}(?![A-Za-z0-9_-])"
+
+
+def installed_is_new():
+    """True para Mango >= 0.18 (ou quando nao da para saber: os nomes novos sao o padrao)."""
+    try:
+        res = subprocess.run(["mango", "-v"], capture_output=True, text=True, timeout=5)
+    except (OSError, subprocess.TimeoutExpired):
+        return True
+    m = re.search(r"(\d+)\.(\d+)", res.stdout + res.stderr)
+    return not m or (int(m.group(1)), int(m.group(2))) >= (0, 18)
+
+
+def key(name):
+    """Nome da chave para o Mango instalado (a config usa os nomes novos)."""
+    return name if installed_is_new() else OLD_FOR.get(name, name)
+
+
+def convert(text, to_new):
+    pairs = RENAMES if to_new else [(new, old) for new, old in OLD_FOR.items()]
+    # Os mais longos primeiro, para "windowrule" nao comer o inicio de "windowrule-once"
+    for src, dst in sorted(pairs, key=lambda p: -len(p[0])):
+        text = re.sub(WORD.format(re.escape(src)), dst, text)
+    return text
+
+
+def main():
+    args = sys.argv[1:]
+    if args == ["version"]:
+        print("new" if installed_is_new() else "old")
+        return
+    if len(args) < 2 or args[0] not in ("auto", "new", "old"):
+        sys.exit("uso: voidbr-compat auto|new|old ARQUIVO... | voidbr-compat version")
+    to_new = installed_is_new() if args[0] == "auto" else args[0] == "new"
+    for path in args[1:]:
+        with open(path) as f:
+            text = f.read()
+        new = convert(text, to_new)
+        if new != text:
+            with open(path, "w") as f:
+                f.write(new)
+
+
+if __name__ == "__main__":
+    main()

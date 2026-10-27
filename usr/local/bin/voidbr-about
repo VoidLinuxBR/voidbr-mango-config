@@ -1,9 +1,8 @@
 #!/bin/sh
 # ====================================================================
 # VoidBR Mango - "Sobre o VoidBR" (botao  VoidBR da barra)
-# Mostra o fastfetch (sem logo) numa janela do yad, como no Waybar
-# original do voidbr-mango-config. Clicar de novo no botao fecha; clicar
-# fora tambem (voidbr-click-outside), como os outros popups da barra.
+# Mostra o fastfetch (sem logo) numa janela do yad. Clicar de novo no
+# botao fecha; clicar fora tambem (voidbr-click-outside).
 # ====================================================================
 TITLE="Sobre o VoidBR"
 

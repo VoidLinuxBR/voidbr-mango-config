@@ -34,7 +34,7 @@
     "on-click": "pkill -x rofi || voidbr-rofi -show drun"
   },
   // Tags em uso + a atual, seguidas da proxima tag livre ("uma a mais")
-  // Do Waybar original do voidbr-mango-config (pedido do Vilmar)
+  // Sobre o VoidBR (fastfetch)
   "custom/about": {
     "format": " VoidBR",
     "tooltip": true,
@@ -173,7 +173,7 @@
     "tooltip-format": "Atalhos do VoidBR Mango (Super+F1)",
     "on-click": "/usr/local/bin/voidbr-mango-shortcuts"
   },
-  // Volume nativo do PipeWire (substitui o modulo pulseaudio)
+  // Volume do PipeWire
   "wireplumber": {
     "format": "{icon} {volume}%",
     "format-muted": "󰝟 {volume}%",

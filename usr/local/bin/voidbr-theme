@@ -363,17 +363,19 @@ invisible=0
     # Bordas e fundo do Mango (formato 0xRRGGBBAA)
     m = {k: f"0x{v}ff" for k, v in h.items()}
     write(f"{CONF}/mango/colors.conf", f"""# {HEADER}
-rootcolor={m['bg2']}
-bordercolor=0x{h['border']}40
-focuscolor=0x{h['accent']}80
-maximizescreencolor={m['green']}
-urgentcolor={m['red']}
-scratchpadcolor={m['blue']}
-globalcolor={m['magenta']}
-overlaycolor=0x{h['accent']}80
-dropcolor=0x{h['green']}55
-splitcolor={m['orange']}
+root_color={m['bg2']}
+border_color=0x{h['border']}40
+focus_color=0x{h['accent']}80
+maximized_screen_color={m['green']}
+urgent_color={m['red']}
+scratchpad_color={m['blue']}
+global_color={m['magenta']}
+overlay_color=0x{h['accent']}80
+drop_color=0x{h['green']}55
+split_color={m['orange']}
 """)
+    # Nomes do Mango 0.18; o voidbr-compat troca para os antigos no 0.17
+    subprocess.run(["voidbr-compat", "auto", f"{CONF}/mango/colors.conf"], stderr=subprocess.DEVNULL)
 
     # Recarrega o que roda agora (foot e apps GTK pegam na proxima janela)
     restart_waybar()

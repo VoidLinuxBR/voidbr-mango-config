@@ -17,6 +17,7 @@ md5sums=('SKIP')
 makedepends=()
 depends=(
 	voidbr-sddm-themes # o tema voidbr-mango reaproveita o código do tema voidbr
+	'mangowc>=0.18'    # a config usa os nomes de chave do Mango 0.18
 )
 backup=(
 	/etc/sddm.conf.d/wayland.conf
@@ -73,6 +74,14 @@ EOF
 		sed -i 's/^Current=.*/Current=voidbr-mango/' /etc/sddm.conf
 	fi
 	printf '[Theme]\nCurrent=voidbr-mango\n' >/etc/sddm.conf.d/10-voidbr-mango.conf
+
+	# Config do Mango de quem ja tem o usuario criado: chaves com os nomes da versao instalada
+	for dir in /home/*/.config/mango /root/.config/mango; do
+		[ -d "$dir" ] || continue
+		for conf in "$dir"/*.conf; do
+			[ -f "$conf" ] && /usr/local/bin/voidbr-compat auto "$conf" || true
+		done
+	done
 }
 
 pre_upgrade() {

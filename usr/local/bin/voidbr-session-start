@@ -19,6 +19,20 @@ if [ ! -e "$WALL" ]; then
     done
 fi
 
+# Audio: o pipewire sobe pelo base.conf. Quando o pipewire.conf.d tem o
+# wireplumber e o pipewire-pulse, o proprio pipewire os inicia; senao, sobem aqui.
+pw_conf_d() {
+    for f in /etc/pipewire/pipewire.conf.d/*"$1"* /usr/share/pipewire/pipewire.conf.d/*"$1"* \
+        "$HOME"/.config/pipewire/pipewire.conf.d/*"$1"*; do
+        [ -e "$f" ] && return 0
+    done
+    return 1
+}
+for _ in $(seq 20); do [ -S "$XDG_RUNTIME_DIR/pipewire-0" ] && break; sleep 0.1; done
+for svc in wireplumber pipewire-pulse; do
+    pw_conf_d "$svc" || pgrep -u "$USER" -x "$svc" >/dev/null || "$svc" &
+done
+
 # Chaveiro de senhas: o PAM do login (SDDM) ja o abriu com a senha do
 # usuario; aqui ele se liga a esta sessao D-Bus (dbus-run-session)
 command -v gnome-keyring-daemon >/dev/null &&

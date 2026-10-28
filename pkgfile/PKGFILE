@@ -81,6 +81,8 @@ EOF
 		for conf in "$dir"/*.conf; do
 			[ -f "$conf" ] && /usr/local/bin/voidbr-compat auto "$conf" || true
 		done
+		# wireplumber e pipewire-pulse sobem pelo voidbr-session-start (evita rodar em dobro)
+		[ -f "$dir/base.conf" ] && sed -i -E '/^exec[-_]once *= *(wireplumber|pipewire-pulse)$/d' "$dir/base.conf"
 	done
 }
 

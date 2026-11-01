@@ -19,6 +19,12 @@ OPCOES="󰩭  Capturar área
 ESCOLHA=$(printf '%s\n' "$OPCOES" | voidbr-rofi -dmenu -i -p "Captura" \
     -theme-str 'entry { placeholder: "Pesquisar..."; } listview { lines: 8; }')
 
+[ -n "$ESCOLHA" ] || exit 0
+
+# Espera a animacao de fechar do rofi (animation_duration_close), senao o
+# menu sai na captura
+sleep 0.9
+
 case "$ESCOLHA" in
     *"Capturar área"*)             voidbr-screenshot area ;;
     *"Capturar tela inteira"*)     voidbr-screenshot tela ;;

@@ -83,6 +83,12 @@ EOF
 		done
 		# wireplumber e pipewire-pulse sobem pelo voidbr-session-start (evita rodar em dobro)
 		[ -f "$dir/base.conf" ] && sed -i -E '/^exec[-_]once *= *(wireplumber|pipewire-pulse)$/d' "$dir/base.conf"
+		# Cursor do Mango igual ao dos apps (Bibata)
+		[ -f "$dir/base.conf" ] && ! grep -q '^cursor_theme=' "$dir/base.conf" &&
+			sed -i '$a cursor_theme=Bibata-Modern-Ice' "$dir/base.conf"
+		# Xicara do Waybar: fumegando = ligada, vazia = desligada
+		[ -f "$dir/../waybar/config" ] && sed -i -e 's/"activated": "󰅶"/"activated": ""/' \
+			-e 's/"deactivated": "󰅶"/"deactivated": "󰛊"/' "$dir/../waybar/config" || true
 	done
 }
 

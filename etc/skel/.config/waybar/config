@@ -242,8 +242,8 @@
   "idle_inhibitor": {
     "format": "{icon}",
     "format-icons": {
-      "activated": "󰅶",
-      "deactivated": "󰅶"
+      "activated": "",
+      "deactivated": "󰛊"
     },
     "tooltip-format-activated": "Manter acordado: ATIVADO",
     "tooltip-format-deactivated": "Manter acordado: desligado"

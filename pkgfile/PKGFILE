@@ -62,17 +62,24 @@ post_install() {
 	# O /etc/sddm.conf.d/wayland.conf (greeter em Wayland, compositor sway) é do
 	# voidbr-sddm-themes; este pacote não mexe mais nele.
 
-	# Tema do SDDM da edição Mango (o tema voidbr-mango agora vem no
-	# voidbr-sddm-themes). No build da ISO (MKISO_BUILD) quem decide o tema é o
-	# mkiso (voidbr-mango na ISO mango e na multi); aqui só fora da ISO, para
-	# quem instala a edição Mango num sistema já pronto.
-	# O /etc/sddm.conf é lido por último e tem prioridade sobre o sddm.conf.d.
+	# Tema do SDDM da edição Mango (o tema voidbr-mango vem no voidbr-sddm-themes).
+	# O padrão do pacote fica no /etc/sddm.conf.d/10-theme.conf, que não é
+	# alterado; a edição grava o 50-voidbr-theme.conf, o mesmo arquivo da aba
+	# "Tela de login" dos voidbr-*-tweaks. Só cria se ainda não existir: se
+	# existe, é escolha de alguém e fica como está (o post_upgrade também passa
+	# por aqui). No build da ISO (MKISO_BUILD) quem decide o tema é o mkiso
+	# (voidbr-mango na ISO mango e na multi); aqui só fora da ISO, para quem
+	# instala a edição Mango num sistema já pronto.
 	if [ -z "${MKISO_BUILD:-}" ]; then
-		if [ -f /etc/sddm.conf ] && grep -q '^Current=' /etc/sddm.conf; then
-			sed -i 's/^Current=.*/Current=voidbr-mango/' /etc/sddm.conf
+		# arquivo próprio das versões antigas deste pacote
+		rm -f /etc/sddm.conf.d/10-voidbr-mango.conf
+		if [ ! -e /etc/sddm.conf.d/50-voidbr-theme.conf ] &&
+			[ -d /usr/share/sddm/themes/voidbr-mango ]; then
+			mkdir -p /etc/sddm.conf.d
+			printf '# voidbr-sddm-theme: tema da tela de login (padrão da edição Mango)\n[Theme]\nCurrent=voidbr-mango\n' \
+				>/etc/sddm.conf.d/50-voidbr-theme.conf
+			chmod 644 /etc/sddm.conf.d/50-voidbr-theme.conf
 		fi
-		mkdir -p /etc/sddm.conf.d/
-		printf '[Theme]\nCurrent=voidbr-mango\n' >/etc/sddm.conf.d/10-voidbr-mango.conf
 	fi
 
 	# Config do Mango de quem ja tem o usuario criado: chaves com os nomes da versao instalada
